@@ -16,9 +16,10 @@ import { SegmentedChoice, SelectionRow } from '../components/controls';
 import { OrganizeSamples } from '../components/OrganizeSamples';
 import { BackupControls } from '../features/BackupControls';
 import { router } from 'expo-router';
+import { AppearancePicker } from '../components/AppearancePicker';
 
 export default function SettingsScreen() {
-  const { data, repository } = useMemory();
+  const { data, repository, isDemo } = useMemory();
   const { colors } = useTheme();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -62,15 +63,7 @@ export default function SettingsScreen() {
     <Screen>
       <Header title="Settings" />
       <Section title="Appearance" />
-      <SegmentedChoice
-        value={data.settings.theme}
-        options={[
-          { value: 'system', label: 'System', icon: 'phone-portrait-outline' },
-          { value: 'light', label: 'Light', icon: 'sunny-outline' },
-          { value: 'dark', label: 'Dark', icon: 'moon-outline' },
-        ]}
-        onChange={(theme) => update({ theme: theme as Settings['theme'] })}
-      />
+      <AppearancePicker update={update} />
       <Section title="Preferences" />
       <Panel>
         <SelectionRow
@@ -130,9 +123,11 @@ export default function SettingsScreen() {
       <OrganizeSamples />
       <BackupControls />
       <Copy muted style={{ fontSize: 13, lineHeight: 20 }}>
-        {Platform.OS === 'web'
-          ? 'This preview saves in this browser. Browser storage can be cleared and has limited photo capacity.'
-          : 'Saved on this device. No account, cloud service, or location tracking.'}
+        {isDemo
+          ? 'Demo changes are temporary. Exit the demo to return to your saved belongings.'
+          : Platform.OS === 'web'
+            ? 'This preview saves in this browser. Browser storage can be cleared and has limited photo capacity.'
+            : 'Saved on this device. No account, cloud service, or location tracking.'}
       </Copy>
       <Panel>
         <SelectionRow
@@ -144,11 +139,11 @@ export default function SettingsScreen() {
         />
         <View style={{ height: 1, backgroundColor: colors.border }} />
         <SelectionRow
-          title="Restore missing demo items"
-          subtitle="Add sample memories without replacing your items."
+          title="Welcome & demo"
+          subtitle="Explore a separate sample collection, or return to your items."
           icon="sparkles-outline"
           disabled={busy}
-          onPress={() => action(() => repository.seedDemo())}
+          onPress={() => router.push('/welcome')}
         />
         <View style={{ height: 1, backgroundColor: colors.border }} />
         <SelectionRow

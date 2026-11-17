@@ -1,3 +1,4 @@
+import { normalizeColorTheme } from '../theme/appearance';
 import {
   defaultSettings,
   type MemoryData,
@@ -39,6 +40,10 @@ export function normalizeSettings(
   return {
     ...defaultSettings,
     ...settings,
+    theme: ['system', 'light', 'dark'].includes(settings?.theme ?? '')
+      ? settings!.theme!
+      : 'system',
+    colorTheme: normalizeColorTheme(settings?.colorTheme),
     inventoryGroupBy: ['items', 'folders', 'places', 'categories'].includes(
       settings?.inventoryGroupBy ?? '',
     )

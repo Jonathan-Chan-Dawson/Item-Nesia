@@ -1,4 +1,5 @@
 import { useMotion } from '../hooks/useMotion';
+import { DemoNotice } from './DemoNotice';
 import { useState, type ReactNode, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
@@ -181,6 +182,7 @@ export function Screen({
       edges={['top', 'bottom', 'left', 'right']}
       style={{ flex: 1, backgroundColor: colors.background }}
     >
+      <DemoNotice />
       {scroll ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"

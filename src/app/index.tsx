@@ -26,8 +26,9 @@ import { placePath } from '../utils/memory';
 import { folderPath } from '../utils/folders';
 import { SegmentedChoice } from '../components/controls';
 import { DEMO_ITEM_COUNT } from '../database/demo';
+import { Welcome } from '../features/Welcome';
 export default function Home() {
-  const { data, repository } = useMemory();
+  const { data, repository, isDemo, startDemo } = useMemory();
   const { colors } = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const columns = width < 350 || fontScale > 1.3 ? 1 : 2;
@@ -36,15 +37,10 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const list = data.settings.homeItemsView === 'list';
   const itemColumns = list ? 1 : columns;
-  const missingSamples = Array.from(
-    { length: DEMO_ITEM_COUNT },
-    (_, index) => `demo-item-${index}`,
-  ).filter((id) => !data.items.some((item) => item.id === id)).length;
   function addSamples() {
     setBusy(true);
     setError(undefined);
-    void repository
-      .seedDemo()
+    void startDemo()
       .catch((e) => setError(e.message))
       .finally(() => setBusy(false));
   }
@@ -53,6 +49,14 @@ export default function Home() {
     recent: items,
     activeCount,
   } = homeSections(data.items, columns);
+  if (
+    !isDemo &&
+    !data.settings.onboardingCompleted &&
+    !data.items.length &&
+    !data.places.length &&
+    !data.folders.length
+  )
+    return <Welcome />;
   return (
     <Screen
       overlay={
@@ -279,22 +283,14 @@ export default function Home() {
               />
               <Button
                 secondary
-                title={`Explore demo · ${DEMO_ITEM_COUNT} sample items`}
+                title={`Try the demo · ${DEMO_ITEM_COUNT} sample items`}
                 busy={busy}
+                disabled={isDemo}
                 onPress={addSamples}
               />
             </>
           )}
         </View>
-      )}
-      {!!activeCount && missingSamples > 0 && (
-        <Button
-          secondary
-          title={`Add ${missingSamples} sample items`}
-          icon="sparkles-outline"
-          busy={busy}
-          onPress={addSamples}
-        />
       )}
       <OrganizeSamples />
       <SurpriseButton items={data.items} />

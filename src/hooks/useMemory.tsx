@@ -9,7 +9,10 @@ import { useColorScheme } from 'react-native';
 import { storage } from '../database/storage';
 import { MemoryRepository } from '../repositories/memory';
 import { emptyData, type MemoryData } from '../types/models';
-import { palettes } from '../theme/tokens';
+import { colorPalettes } from '../theme/tokens';
+import { normalizeColorTheme } from '../theme/appearance';
+import { demoStorage } from '../database/demo-session';
+import { photoReferences } from '../utils/backup';
 import { removePhoto } from '../services/photos';
 
 interface Context {
@@ -18,6 +21,9 @@ interface Context {
   loading: boolean;
   error?: string;
   retry(): void;
+  isDemo: boolean;
+  startDemo(): Promise<void>;
+  exitDemo(): Promise<void>;
 }
 const MemoryContext = createContext<Context | null>(null);
 export function MemoryProvider({ children }: { children: ReactNode }) {
@@ -25,6 +31,10 @@ export function MemoryProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
+  const [demo, setDemo] = useState<{
+    data: MemoryData;
+    repository: MemoryRepository;
+  }>();
   const [repository] = useState(
     () => new MemoryRepository(storage, setData, removePhoto),
   );
@@ -41,8 +51,33 @@ export function MemoryProvider({ children }: { children: ReactNode }) {
   return (
     <MemoryContext.Provider
       value={{
-        data,
-        repository,
+        data: demo?.data ?? data,
+        repository: demo?.repository ?? repository,
+        isDemo: !!demo,
+        startDemo: async () => {
+          let snapshot = emptyData();
+          const demoRepository = new MemoryRepository(
+            demoStorage(data.settings),
+            (next) => {
+              snapshot = next;
+              setDemo((active) =>
+                active?.repository === demoRepository
+                  ? { ...active, data: next }
+                  : active,
+              );
+            },
+            async (uri) => {
+              if (!photoReferences(data).includes(uri)) await removePhoto(uri);
+            },
+          );
+          await demoRepository.initialize();
+          setDemo({ data: snapshot, repository: demoRepository });
+        },
+        exitDemo: async () => {
+          if (!demo) return;
+          await demo.repository.clear();
+          setDemo(undefined);
+        },
         loading,
         error,
         retry: () => {
@@ -67,5 +102,11 @@ export function useTheme() {
   const dark =
     (data.settings.theme === 'system' ? system : data.settings.theme) ===
     'dark';
-  return { colors: palettes[dark ? 'dark' : 'light'], dark };
+  return {
+    colors:
+      colorPalettes[normalizeColorTheme(data.settings.colorTheme)][
+        dark ? 'dark' : 'light'
+      ],
+    dark,
+  };
 }

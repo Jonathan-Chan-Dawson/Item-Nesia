@@ -16,6 +16,7 @@
     "src/utils/**/*.ts",
     "src/repositories/**/*.ts",
     "src/database/demo.ts",
+    "src/database/demo-session.ts",
     "src/database/storage.types.ts"
   ]
 }

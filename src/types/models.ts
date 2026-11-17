@@ -1,3 +1,4 @@
+import type { ColorTheme } from '../theme/appearance';
 export const categories = [
   'Electronics',
   'Documents',
@@ -84,6 +85,7 @@ export interface Settings {
   reduceAnimations?: boolean;
   inventoryGroupBy?: 'items' | 'folders' | 'places' | 'categories';
   theme: 'system' | 'light' | 'dark';
+  colorTheme?: ColorTheme;
   defaultItemsView: 'grid' | 'list';
   homeItemsView?: 'grid' | 'list';
   hapticsEnabled: boolean;
@@ -120,6 +122,7 @@ export type ItemDraft = Pick<
 >;
 export const defaultSettings: Settings = {
   theme: 'system',
+  colorTheme: 'mint',
   defaultItemsView: 'grid',
   homeItemsView: 'grid',
   hapticsEnabled: true,

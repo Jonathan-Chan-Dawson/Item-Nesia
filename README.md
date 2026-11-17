@@ -44,7 +44,7 @@ No environment variables or API keys are required. Development dependency downlo
 - Contents-first nested folders with a separate Unfiled view, searchable add-existing-item flow, inline creation, and safe rename/reparent/delete actions. Folder views start with direct items; place views include descendants by default. Both offer a visible Search everywhere action.
 - Create, browse, rename, and reparent nested places; create a place inline while editing an item; reject circular hierarchies.
 - Persisted system/light/dark appearance, haptics setting, default inventory view, metadata export, additive demo restoration, and confirmed data clearing.
-- Sixty labeled demo items with category icons. Samples never overwrite existing records, including edited samples. Home offers Add sample items to fill an older demo with the new cooking, grooming, car, travel, and hobby examples. Home layout is saved independently of the inventory layout and included in full backups.
+- Sixty labeled demo items with category icons in a separate temporary collection, including cooking, grooming, car, travel, and hobby examples. Try the demo from the welcome screen and leave from the persistent Exit demo strip. Home layout is saved independently of the inventory layout and included in full backups.
 
 ## Project structure
 
@@ -66,6 +66,10 @@ tests/             Focused domain and persistence-contract tests
 Routes include home, search, capture, inventory, item details/edit/move, places/details/new/edit, folders/details/unfiled, Quick Access, favorites, archive, Trash, Backups, settings, and about. Favorites and archive remain compatible routes; the main interface exposes Starred and Archived through visible choices and the utility menu. Non-route code stays outside `src/app`.
 
 ## UI refinements
+
+Appearance offers System, Light, and Dark modes plus Default, Mint, Linen, Harbor, and Berry palettes. Each palette includes matching light and dark surfaces, and the choices are saved with settings and backups.
+
+New collections open a simple welcome screen with Start with my items and Try the demo. The demo uses a temporary, separate collection of 60 samples; an Exit demo strip stays visible on every screen and returns to the welcome page. Demo edits never change the personal collection, and restarting the app ends the demo. Open Settings → Welcome & demo to explore again. Samples previously added to a personal collection are retained.
 
 The shared UI uses compact search/filter/sort controls, searchable choice sheets, segmented appearance/view preferences, category-tinted item artwork, and contextual overflow menus. Home shows an optional Quick Access grid, eight recently added or physically moved items with a saved Grid/List choice, and a Browse row directly below the save button. Editing a name, favorite, category, or folder does not change Home recency or location history. Small windows and larger accessibility text switch grids to one column; narrow Home headers simplify the branding to preserve both action buttons. Place counts include nested locations; item details retain the exact recorded location and use a compact history timeline.
 
