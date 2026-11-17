@@ -4,6 +4,7 @@ export const categories = [
   'Accessories',
   'Clothing',
   'Household',
+  'Kitchen & Dining',
   'Tools',
   'Hobbies',
   'Other',
@@ -19,6 +20,7 @@ export interface Item {
   photoUri?: string;
   locationPhotoUri?: string;
   placeId?: string;
+  folderId?: string;
   exactSpot?: string;
   locationPinX?: number;
   locationPinY?: number;
@@ -40,6 +42,13 @@ export interface Place {
   createdAt: string;
   updatedAt: string;
 }
+export interface Folder {
+  id: string;
+  name: string;
+  parentId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface LocationHistory {
   id: string;
   itemId: string;
@@ -56,10 +65,16 @@ export interface Settings {
   hapticsEnabled: boolean;
   onboardingCompleted: boolean;
   demoInitialized: boolean;
+  quickAccess: QuickAccessRef[];
+}
+export interface QuickAccessRef {
+  kind: 'place' | 'folder';
+  id: string;
 }
 export interface MemoryData {
   items: Item[];
   places: Place[];
+  folders: Folder[];
   history: LocationHistory[];
   settings: Settings;
 }
@@ -74,6 +89,9 @@ export type ItemDraft = Pick<
   | 'locationPhotoUri'
   | 'placeId'
   | 'exactSpot'
+  | 'folderId'
+  | 'locationPinX'
+  | 'locationPinY'
 >;
 export const defaultSettings: Settings = {
   theme: 'system',
@@ -81,10 +99,12 @@ export const defaultSettings: Settings = {
   hapticsEnabled: true,
   onboardingCompleted: false,
   demoInitialized: false,
+  quickAccess: [],
 };
 export const emptyData = (): MemoryData => ({
   items: [],
   places: [],
+  folders: [],
   history: [],
-  settings: { ...defaultSettings },
+  settings: { ...defaultSettings, quickAccess: [] },
 });

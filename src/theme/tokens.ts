@@ -11,6 +11,8 @@ export const palettes = {
     warm: '#F3D28A',
     danger: '#B64242',
     onPrimary: '#FFFFFF',
+    subtle: '#EFF4F0',
+    shadow: '#193C330A',
   },
   dark: {
     background: '#111C1B',
@@ -24,6 +26,8 @@ export const palettes = {
     warm: '#806A39',
     danger: '#FF9999',
     onPrimary: '#111C1B',
+    subtle: '#192623',
+    shadow: '#00000000',
   },
 };
 export type Palette = typeof palettes.light;

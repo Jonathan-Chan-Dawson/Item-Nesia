@@ -32,13 +32,16 @@ No environment variables or API keys are required. Development dependency downlo
 
 ## What works
 
-- Search-first home, compact destination menu, and stack navigation.
+- Search-first Home, a three-destination menu (All Items, Places, Folders), a separate Settings button, and stack navigation.
+- Up to four optional, ordered Quick Access shortcuts to any place or folder. Pin from its menu or manage shortcuts in Settings; broken and duplicate shortcuts are removed automatically.
 - Real empty state with a short dismissible introduction; sample data is loaded only through an explicit action.
 - Remember an item with a name, place and/or exact spot, optional item photo, and separate location photo. Optional category, description, aliases, and tags are collapsed initially.
 - Camera permission handling, system image selection, cancellation, photo removal, save validation, unsaved-item confirmation, and duplicate-save protection.
-- Item detail, edit, move, location history, favorites, archive/restore, and confirmed deletion.
-- Ranked case-insensitive local search across names, aliases, categories, descriptions, tags, exact spots, and parent-place names. Archived items are excluded.
-- Virtualized all-items/search/place lists, inventory grid/list toggle, and four sort orders.
+- Item detail, edit, duplicate, change folder, move, location history, favorites, archive/restore, and confirmed deletion. Item details prioritize the last saved physical location; organization details are collapsed.
+- Ranked case-insensitive local search across names, aliases, categories, descriptions, tags, exact spots, parent-place names, and folder paths. Archived items appear only in the Archived view.
+- One shared inventory query for search, All Items, places, and folders. Combine view, category, place, and folder filters; remove individual filter chips or reset filters. Kitchen & Dining is an optional category, independent of physical storage.
+- Virtualized inventory and scoped lists, grid/list toggle, and best-match, recently added, recently moved, alphabetical, and oldest-first sorting.
+- Contents-first nested folders with a separate Unfiled view, searchable add-existing-item flow, inline creation, and safe rename/reparent/delete actions. Folder views start with direct items; place views include descendants by default. Both offer a visible Search everywhere action.
 - Create, browse, rename, and reparent nested places; create a place inline while editing an item; reject circular hierarchies.
 - Persisted system/light/dark appearance, haptics setting, default inventory view, metadata export, additive demo restoration, and confirmed data clearing.
 - Fifteen labeled demo items with category icons. Samples never overwrite existing records, including edited samples.
@@ -60,17 +63,34 @@ src/
 tests/             Focused domain and persistence-contract tests
 ```
 
-Routes include home, search, capture, inventory, item details/edit/move, places/details/new/edit, favorites, archive, settings, and about. Non-route code stays outside `src/app`.
+Routes include home, search, capture, inventory, item details/edit/move, places/details/new/edit, folders/details/unfiled, Quick Access, favorites, archive, settings, and about. Favorites and archive remain compatible routes; the main interface exposes them through All Items filters. Non-route code stays outside `src/app`.
+
+## UI refinements
+
+The shared UI uses compact search/filter/sort controls, searchable choice sheets, segmented appearance/view preferences, category-tinted item artwork, and contextual overflow menus. Home shows an optional Quick Access grid, four recently added or physically moved items, and a small Browse row that scrolls with the page. Editing a name, favorite, category, or folder does not change Home recency or location history. Small windows and larger accessibility text switch grids to one column; narrow Home headers simplify the branding to preserve both action buttons. Place counts include nested locations; item details retain the exact recorded location and use a compact history timeline.
+
+The organization model has four distinct concepts: an **item** is the belonging, a **place** records where it is physically stored, a **folder** is a personal group, and an optional **category** describes its type. A camping spatula can belong to Camping, have the Kitchen & Dining category, and be physically stored in Garage → Camping box. Kitchen can be an ordinary pinned place. Haircut logs, parked-car tools, recipes, and other specialized workflows remain future modules; this release keeps the shared belongings inventory focused.
 
 ## Storage and reliability
 
-**Native:** SQLite stores item, place, history, and settings entities in separate tables. Schema version 1 uses typed JSON records per entity; linked changes are committed in an exclusive transaction. `PRAGMA user_version` provides the migration boundary and newer unsupported schemas are rejected. Mutations serialize and the UI updates only after persistence succeeds. This initial snapshot-write strategy favors correctness for demo-size collections; indexed columns, incremental writes, and SQL search should precede large inventories.
+**Native:** SQLite stores item, place, folder, history, and settings entities in separate tables. Schema version 2 adds folders without replacing version 1 data. Records use typed JSON; linked changes commit in an exclusive transaction. `PRAGMA user_version` provides the migration boundary and newer unsupported schemas are rejected. Mutations serialize and the UI updates only after persistence succeeds. This initial snapshot-write strategy favors correctness for demo-size collections; indexed columns, incremental writes, and SQL search should precede large inventories.
 
 Native photos are copied from picker/cache URIs to the persistent app document directory before metadata is committed. Failed saves attempt to remove new copies. Deleting/replacing a final photo reference removes the managed file; shared references remain intact. Cleanup failures do not roll back a successful save. Crash-time orphan reconciliation and rebasing paths after device backup restoration remain future work.
 
 **Browser:** A separate adapter uses a versioned `localStorage` key and stores selected photos as data URLs. Writes are atomic at the snapshot level; quota errors leave the current app state intact and surface an error. This is a limited preview, not native-equivalent persistence: clearing browser data removes memories, large photos can exhaust quota, and multiple tabs do not coordinate edits. Use one preview tab at a time. Private-browser restrictions may prevent storage.
 
-Metadata export deliberately excludes image bytes. Native export shares JSON text through the platform share sheet; browser export downloads JSON. It is not a complete photo backup and no import/restore workflow is claimed.
+Metadata export remains a lightweight JSON option without photo bytes. For complete backups, use Settings → Create full backup. This writes a version 2 ZIP containing items, folders, places, settings (including ordered Quick Access shortcuts), location history, and every referenced photo; a missing photo aborts export rather than producing an incomplete backup. The reader accepts both version 1 and version 2 backups. Older stored settings and backups gain empty Quick Access without losing existing records. Native uses the system file share sheet; browser downloads the ZIP. Keep the resulting file somewhere safe; it is not encrypted and no cloud service is used.
+
+Settings → Restore full backup validates the archive, sizes, references, hierarchy, pins, and record shapes before showing counts and asking for confirmation. Restore replaces the current collection; merging backups is not supported. New photo files are staged before the transactional metadata replacement. Failed commits preserve current data and clean up staged photos where possible. Browser storage quotas still apply and may reject a large native backup without changing the existing collection.
+
+This version supports app-generated uncompressed ZIP backups up to 64 MB, with a 20 MB limit per photo and 2,000 ZIP entries. Other ZIP formats, recompressed archives, newer versions, and encrypted archives are rejected. The bounded format allows size checks before extraction. Backups are built in memory; larger libraries need a streaming backup implementation.
+
+## Folders, pins, and quicker saving
+
+- Open Folders from Home or the menu. Create nested folders, rename/reparent them through the folder menu, add existing items with +, or select a folder under More details while saving/editing an item. Folder contents show child folders followed by direct items; Filters can include descendants. Folders organize your collection independently of the physical place where an item lives. Each item has one folder, or remains Unfiled. Folder paths also participate in search.
+- Deleting a folder moves its direct items and child folders to its parent (or the top level). No items or photos are deleted. Invalid parent cycles are blocked.
+- Location photos support a saved normalized pin. Tap the actual image to place/reposition it, use directional buttons for finer adjustment, or remove it. Image containment and letterbox offsets are shared by editing, detail, and enlarged views. Replacing/removing the location photo clears its pin.
+- Creation shows three recently used places. After saving a new item, “Remember another here” starts a fresh item with the same place and folder, without reusing either photo. If no place was selected, it retains the descriptive exact spot so the location is not lost. Photos remain optional and other details stay collapsed.
 
 ## Checks
 
@@ -82,16 +102,16 @@ npx expo install --check
 npx expo export --platform web
 ```
 
-Tests cover empty initialization, non-destructive demo restoration, repository reload persistence, move/history consistency, settings, archiving, ranked search, place cycle prevention, validation, failed writes, concurrent mutation serialization, and shared photo cleanup. The persistence tests use a storage contract test adapter; they do not exercise an actual native SQLite engine or physical camera.
+Tests cover initialization, additive demo restoration, repository reload persistence, move/history consistency, independent filing/favoriting, shared filter intersections and sorting, archived/Unfiled/Uncategorized views, shortcut limits/order/migration, version 1 and 2 backup compatibility, duplication, hierarchy cycles, validation, failed writes, mutation serialization, pin geometry, and shared photo cleanup. The persistence tests use a storage contract test adapter; they do not exercise an actual native SQLite engine or physical camera.
 
 ## Foundation boundaries / next steps
 
 This delivers a functional first slice, not every feature of the complete demo brief. Next priorities:
 
 1. Native device QA for camera permission denial, image persistence after process restart, keyboard behavior, back gestures, small screens, and both themes.
-2. Location-photo enlargement/zoom and accurate normalized visual pins, with image scaling tests.
-3. Place covers/descriptions and safe place deletion with explicit reassignment; item duplication and compact contextual menus; category filters.
-4. A dedicated short onboarding flow, recent-place ordering, and stronger empty/error polish.
+2. Pin dragging and image zoom beyond the current enlarge view; real-device EXIF/orientation checks.
+3. Place covers/descriptions and safe place deletion with explicit reassignment.
+4. A dedicated short onboarding flow, query restoration after process termination, independent descendant controls when combining place and folder filters, and further empty/error polish.
 5. SQLite engine integration tests, web storage quota tests, runtime schema validation, crash orphan cleanup, and incremental indexed database writes.
 
 No physical iOS or Android device testing is claimed. Original starter app icons remain in place pending branding work.
@@ -99,10 +119,10 @@ No physical iOS or Android device testing is claimed. Original starter app icons
 ## Validation performed
 
 - TypeScript and Expo lint passed.
-- Seven focused automated tests passed.
+- Twenty-four focused automated tests passed, including the organization, shortcuts, query, duplication, and backup compatibility checks above, plus full backup/photo round trips (including a 393 KB browser data URL), invalid archives, and failed restores.
 - Expo SDK dependency check passed using the installed SDK dependency map (the online versions endpoint was unavailable).
 - Production JavaScript exports passed for web, Android, and iOS. Native export is a bundling check, not a signed binary or device run.
-- Browser UI walkthrough passed: save “Spare Charger,” create “Backpack” inline, move to “Front pocket,” reload, search with extra spaces and different capitalization, open details, and verify both location history entries.
-- A 390 × 844 browser viewport was inspected. Physical-device camera, native SQLite, picker permissions, native back gestures, and offline cold start still require device QA.
+- Earlier browser walkthroughs exercised save → move → reload → search → history, nested folder creation, saving a photo and pin, enlarged photo display, backup download, and repeat-save retention at 390 × 844.
+- The current organization redesign has passed automated checks and export checks. Its visual browser walkthrough remains pending because browser automation was unavailable in this session. Physical-device camera, native SQLite, picker permissions, native back gestures, offline cold start, sharing/picking, and destructive restore through the UI still require device QA.
 
 API choices were checked against the [Expo SDK 58 documentation](https://docs.expo.dev/versions/v58.0.0/) and [SDK 58 screen-removal guidance](https://docs.expo.dev/router/advanced/prevent-screen-removal/).

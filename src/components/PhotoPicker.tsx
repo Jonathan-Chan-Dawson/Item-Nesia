@@ -9,10 +9,12 @@ export function PhotoPicker({
   uri,
   onChange,
   label,
+  children,
 }: {
   uri?: string;
   onChange(uri?: string): void;
   label: string;
+  children?: import('react').ReactNode;
 }) {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -47,31 +49,50 @@ export function PhotoPicker({
   return (
     <View style={{ gap: 12 }}>
       <Copy style={{ fontWeight: '600' }}>{label}</Copy>
-      <View
-        style={{
-          height: uri ? 220 : 120,
-          backgroundColor: colors.soft,
-          borderRadius: 22,
-          overflow: 'hidden',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {uri ? (
-          <Image
-            source={{ uri }}
-            contentFit="contain"
-            style={{ width: '100%', height: '100%' }}
-          />
-        ) : (
-          <>
-            <Icon name="camera-outline" size={32} />
-            <Copy muted style={{ fontSize: 12 }}>
-              A little visual reminder. Optional.
-            </Copy>
-          </>
-        )}
-      </View>
+      {uri && children ? (
+        children
+      ) : (
+        <View
+          style={{
+            height: uri ? 220 : 150,
+            backgroundColor: colors.subtle,
+            borderRadius: 22,
+            overflow: 'hidden',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: uri ? 0 : 1.5,
+            borderStyle: 'dashed',
+            borderColor: colors.border,
+            gap: 8,
+          }}
+        >
+          {uri ? (
+            <Image
+              source={{ uri }}
+              contentFit="contain"
+              style={{ width: '100%', height: '100%' }}
+            />
+          ) : (
+            <>
+              <View
+                style={{
+                  backgroundColor: colors.surface,
+                  padding: 13,
+                  borderRadius: 17,
+                }}
+              >
+                <Icon name="camera-outline" size={28} />
+              </View>
+              <Copy style={{ fontWeight: '600', fontSize: 13 }}>
+                A photo makes it easier to find.
+              </Copy>
+              <Copy muted style={{ fontSize: 12 }}>
+                No photo? A name and a place work too.
+              </Copy>
+            </>
+          )}
+        </View>
+      )}
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <View style={{ flex: 1 }}>
           <Button

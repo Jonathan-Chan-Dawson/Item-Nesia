@@ -1,4 +1,5 @@
-import type { Item, Place } from '../types/models';
+import type { Folder, Item, Place } from '../types/models';
+import { folderPath } from './folders';
 
 export const newId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
@@ -38,14 +39,31 @@ export const locationLabel = (item: Item, places: Place[]) =>
     .filter(Boolean)
     .join(' · ') || 'Location not recorded';
 
+/** Includes the place itself and descendants, with protection against cycles. */
+export function containsPlace(
+  id: string | undefined,
+  ancestorId: string,
+  places: Place[],
+): boolean {
+  const seen = new Set<string>();
+  while (id && !seen.has(id)) {
+    if (id === ancestorId) return true;
+    seen.add(id);
+    id = places.find((place) => place.id === id)?.parentId;
+  }
+  return false;
+}
+
 export function searchItems(
   items: Item[],
   places: Place[],
   query: string,
+  folders: Folder[] = [],
+  includeArchived = false,
 ): Item[] {
   const terms = normalize(query).split(' ').filter(Boolean);
   return items
-    .filter((i) => !i.isArchived)
+    .filter((i) => includeArchived || !i.isArchived)
     .map((item) => {
       const name = normalize(item.name);
       const aliases = normalize(item.aliases.join(' '));
@@ -55,6 +73,7 @@ export function searchItems(
           item.category,
           ...item.tags,
           locationLabel(item, places),
+          folderPath(item.folderId, folders),
         ].join(' '),
       );
       const matches = terms.every((term) =>

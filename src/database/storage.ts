@@ -10,7 +10,7 @@ async function database() {
     const version = await db.getFirstAsync<{ user_version: number }>(
       'PRAGMA user_version',
     );
-    if ((version?.user_version ?? 0) > 1)
+    if ((version?.user_version ?? 0) > 2)
       throw new Error('This data needs a newer version of Item-Nesia.');
     if (!version?.user_version) {
       await db.withExclusiveTransactionAsync(async (tx) => {
@@ -21,6 +21,13 @@ async function database() {
           CREATE TABLE settings (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL);
           PRAGMA user_version = 1;
         `);
+      });
+    }
+    if ((version?.user_version ?? 0) < 2) {
+      await db.withExclusiveTransactionAsync(async (tx) => {
+        await tx.execAsync(
+          'CREATE TABLE IF NOT EXISTS folders (id TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL); PRAGMA user_version = 2;',
+        );
       });
     }
     return db;
@@ -35,7 +42,7 @@ export const storage: StorageAdapter = {
   async load() {
     const db = await database();
     const data = emptyData();
-    for (const table of ['items', 'places', 'history'] as const) {
+    for (const table of ['items', 'places', 'history', 'folders'] as const) {
       const rows = await db.getAllAsync<{ data: string }>(
         `SELECT data FROM ${table}`,
       );
@@ -54,7 +61,7 @@ export const storage: StorageAdapter = {
   async save(data: MemoryData) {
     const db = await database();
     await db.withExclusiveTransactionAsync(async (tx) => {
-      for (const table of ['items', 'places', 'history'] as const) {
+      for (const table of ['items', 'places', 'history', 'folders'] as const) {
         await tx.runAsync(`DELETE FROM ${table}`);
         for (const entity of data[table]) {
           await tx.runAsync(

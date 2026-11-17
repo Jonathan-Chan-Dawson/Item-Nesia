@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type TextInputProps,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -41,21 +42,25 @@ export function Copy({
   muted,
   title,
   style,
+  numberOfLines,
 }: {
   children: ReactNode;
   muted?: boolean;
   title?: boolean;
   style?: ComponentProps<typeof Text>['style'];
+  numberOfLines?: number;
 }) {
   const { colors } = useTheme();
   return (
     <Text
+      numberOfLines={numberOfLines}
       style={[
         {
           color: muted ? colors.secondary : colors.text,
           fontSize: title ? 23 : 15,
           lineHeight: title ? 30 : 23,
           fontWeight: title ? '700' : '400',
+          letterSpacing: title ? -0.5 : 0,
         },
         style,
       ]}
@@ -104,6 +109,9 @@ export function Button({
                 ? colors.pressed
                 : colors.primary,
           opacity: disabled || busy ? 0.5 : pressed ? 0.8 : 1,
+          borderWidth: secondary || danger ? 1 : 0,
+          borderColor: danger ? colors.danger + '33' : colors.border,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
         },
       ]}
     >
@@ -146,8 +154,10 @@ export function IconButton({
         minHeight: 48,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 16,
-        backgroundColor: colors.soft,
+        borderRadius: 50,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
         opacity: pressed ? 0.6 : 1,
       })}
     >
@@ -192,38 +202,41 @@ export function Header({
 }) {
   const [menu, setMenu] = useState(false);
   const { colors } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const compactHome = width < 360 || fontScale > 1.2;
   const destinations: [string, Href, IconName][] = [
-    ['Home', '/', 'home-outline'],
     ['All Items', '/items', 'grid-outline'],
-    ['My Places', '/places', 'file-tray-outline'],
-    ['Favorites', '/favorites', 'heart-outline'],
-    ['Archived Items', '/archived', 'archive-outline'],
-    ['Settings', '/settings', 'settings-outline'],
-    ['About', '/about', 'information-circle-outline'],
+    ['Folders', '/folders', 'folder-outline'],
+    ['Places', '/places', 'file-tray-outline'],
   ];
   return (
     <>
-      <View style={[s.row, { marginBottom: 12 }]}>
+      <View style={[s.row, { marginBottom: home ? 4 : 0 }]}>
         {home ? (
           <View style={[s.row, { justifyContent: 'flex-start', flex: 1 }]}>
-            <View
-              style={{
-                padding: 13,
-                borderRadius: 17,
-                backgroundColor: colors.primary,
-              }}
-            >
-              <Icon name="cube-outline" color={colors.onPrimary} size={25} />
-            </View>
-            <View>
+            {!compactHome && (
+              <View
+                style={{
+                  padding: 11,
+                  borderRadius: 15,
+                  backgroundColor: colors.primary,
+                }}
+              >
+                <Icon name="cube-outline" color={colors.onPrimary} size={24} />
+              </View>
+            )}
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Copy
-                style={{ fontSize: 21, fontWeight: '800', letterSpacing: -0.7 }}
+                numberOfLines={1}
+                style={{ fontSize: 20, fontWeight: '800', letterSpacing: -0.8 }}
               >
                 Item-Nesia
               </Copy>
-              <Copy muted style={{ fontSize: 12 }}>
-                Your backup memory.
-              </Copy>
+              {!compactHome && (
+                <Copy muted style={{ fontSize: 12 }}>
+                  Your backup memory.
+                </Copy>
+              )}
             </View>
           </View>
         ) : (
@@ -242,11 +255,18 @@ export function Header({
         )}
         {right ??
           (home ? (
-            <IconButton
-              icon="menu-outline"
-              label="Open menu"
-              onPress={() => setMenu(true)}
-            />
+            <View style={[s.row, { gap: 8 }]}>
+              <IconButton
+                icon="settings-outline"
+                label="Settings"
+                onPress={() => router.push('/settings')}
+              />
+              <IconButton
+                icon="menu-outline"
+                label="Open menu"
+                onPress={() => setMenu(true)}
+              />
+            </View>
           ) : null)}
       </View>
       <Modal
@@ -297,6 +317,7 @@ export function Header({
 }
 export function Field({ label, ...props }: TextInputProps & { label: string }) {
   const { colors } = useTheme();
+  const [focused, setFocused] = useState(false);
   return (
     <View style={{ gap: 7 }}>
       <Copy style={{ fontWeight: '600' }}>{label}</Copy>
@@ -304,12 +325,23 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
         accessibilityLabel={label}
         placeholderTextColor={colors.secondary}
         {...props}
+        onFocus={(event) => {
+          setFocused(true);
+          props.onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          props.onBlur?.(event);
+        }}
         style={[
           s.input,
           {
             color: colors.text,
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: focused ? colors.primary : colors.border,
+            outlineWidth: 0,
+            outlineStyle: 'solid',
+            outlineColor: 'transparent',
           },
           props.style,
         ]}
@@ -322,8 +354,8 @@ export function Panel({ children }: { children: ReactNode }) {
   return (
     <View
       style={{
-        padding: 20,
-        borderRadius: 22,
+        padding: 18,
+        borderRadius: 20,
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.border,
@@ -345,16 +377,19 @@ export function Section({
 }) {
   return (
     <View style={s.row}>
-      <Copy title style={{ fontSize: 19, flex: 1 }}>
+      <Copy title style={{ fontSize: 19, flex: 1, letterSpacing: -0.6 }}>
         {title}
       </Copy>
       {action && (
         <Pressable
           accessibilityRole="button"
           onPress={onPress}
-          style={{ paddingVertical: 12, paddingLeft: 10 }}
+          style={{ minHeight: 44, justifyContent: 'center', paddingLeft: 10 }}
         >
-          <Copy style={{ fontWeight: '600', fontSize: 13 }}>{action} →</Copy>
+          <View style={[s.row, { gap: 5 }]}>
+            <Copy style={{ fontWeight: '600', fontSize: 13 }}>{action}</Copy>
+            <Icon name="arrow-forward" size={14} />
+          </View>
         </Pressable>
       )}
     </View>
@@ -411,10 +446,10 @@ export async function confirm(
 }
 export const s = StyleSheet.create({
   content: {
-    padding: 24,
+    padding: 20,
     gap: 20,
     width: '100%',
-    maxWidth: 720,
+    maxWidth: 640,
     alignSelf: 'center',
     paddingBottom: 40,
   },
@@ -426,7 +461,7 @@ export const s = StyleSheet.create({
   },
   button: {
     minHeight: 54,
-    borderRadius: 16,
+    borderRadius: 15,
     paddingHorizontal: 18,
     flexDirection: 'row',
     gap: 10,

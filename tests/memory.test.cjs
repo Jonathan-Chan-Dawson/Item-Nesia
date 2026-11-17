@@ -6,7 +6,27 @@ const {
   placePath,
   searchItems,
   validateParent,
+  containsPlace,
 } = require('../.test-build/utils/memory');
+
+test('place membership includes descendants without looping over corrupt cycles', () => {
+  const places = [
+    { id: 'room' },
+    { id: 'drawer', parentId: 'room' },
+    { id: 'other' },
+  ];
+  assert.equal(containsPlace('drawer', 'room', places), true);
+  assert.equal(containsPlace('room', 'room', places), true);
+  assert.equal(containsPlace('other', 'room', places), false);
+  assert.equal(containsPlace(undefined, 'room', places), false);
+  assert.equal(
+    containsPlace('a', 'room', [
+      { id: 'a', parentId: 'b' },
+      { id: 'b', parentId: 'a' },
+    ]),
+    false,
+  );
+});
 
 function setup() {
   let saved = emptyData();

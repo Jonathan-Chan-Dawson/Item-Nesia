@@ -12,7 +12,11 @@ export const storage: StorageAdapter = {
       !Array.isArray(parsed.history)
     )
       throw new Error('Saved browser data could not be read.');
-    return { ...parsed, settings: { ...defaultSettings, ...parsed.settings } };
+    return {
+      ...parsed,
+      folders: parsed.folders ?? [],
+      settings: { ...defaultSettings, ...parsed.settings },
+    };
   },
   async save(data) {
     // One atomic browser write; quota errors propagate before UI state is changed.

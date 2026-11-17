@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Platform, Share, Switch, View } from 'react-native';
 import {
-  Button,
   confirm,
   Copy,
   ErrorMessage,
@@ -13,6 +12,9 @@ import {
 } from '../components/ui';
 import { useMemory, useTheme } from '../hooks/useMemory';
 import type { Settings } from '../types/models';
+import { SegmentedChoice, SelectionRow } from '../components/controls';
+import { BackupControls } from '../features/BackupControls';
+import { router } from 'expo-router';
 
 export default function SettingsScreen() {
   const { data, repository } = useMemory();
@@ -59,18 +61,32 @@ export default function SettingsScreen() {
     <Screen>
       <Header title="Settings" />
       <Section title="Appearance" />
-      {(['system', 'light', 'dark'] as const).map((theme) => (
-        <Button
-          key={theme}
-          title={theme[0].toUpperCase() + theme.slice(1)}
-          secondary={data.settings.theme !== theme}
-          onPress={() => update({ theme })}
-        />
-      ))}
+      <SegmentedChoice
+        value={data.settings.theme}
+        options={[
+          { value: 'system', label: 'System', icon: 'phone-portrait-outline' },
+          { value: 'light', label: 'Light', icon: 'sunny-outline' },
+          { value: 'dark', label: 'Dark', icon: 'moon-outline' },
+        ]}
+        onChange={(theme) => update({ theme: theme as Settings['theme'] })}
+      />
       <Section title="Preferences" />
       <Panel>
+        <SelectionRow
+          title="Quick Access"
+          subtitle="Choose and reorder up to four Home shortcuts."
+          icon="star-outline"
+          onPress={() => router.push('/quick-access')}
+        />
+      </Panel>
+      <Panel>
         <View style={s.row}>
-          <Copy>Haptic feedback</Copy>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Copy style={{ fontWeight: '600' }}>Haptic feedback</Copy>
+            <Copy muted style={{ fontSize: 12 }}>
+              A little tap when a memory is saved.
+            </Copy>
+          </View>
           <Switch
             accessibilityLabel="Haptic feedback"
             value={data.settings.hapticsEnabled}
@@ -78,55 +94,72 @@ export default function SettingsScreen() {
             onValueChange={(hapticsEnabled) => update({ hapticsEnabled })}
           />
         </View>
-        <Button
-          secondary
-          title={`Default view: ${data.settings.defaultItemsView} · change`}
-          onPress={() =>
+        <View style={{ height: 1, backgroundColor: colors.border }} />
+        <Copy style={{ fontWeight: '600' }}>Default items view</Copy>
+        <SegmentedChoice
+          value={data.settings.defaultItemsView}
+          options={[
+            { value: 'grid', label: 'Grid', icon: 'grid-outline' },
+            { value: 'list', label: 'List', icon: 'list-outline' },
+          ]}
+          onChange={(defaultItemsView) =>
             update({
               defaultItemsView:
-                data.settings.defaultItemsView === 'grid' ? 'list' : 'grid',
+                defaultItemsView as Settings['defaultItemsView'],
             })
           }
         />
       </Panel>
       <Section title="Your data" />
-      <Copy muted>
+      <BackupControls />
+      <Copy muted style={{ fontSize: 13, lineHeight: 20 }}>
         {Platform.OS === 'web'
           ? 'This preview saves in this browser. Browser storage can be cleared and has limited photo capacity.'
           : 'Saved on this device. No account, cloud service, or location tracking.'}
       </Copy>
-      <Button
-        secondary
-        title="Export item metadata"
-        disabled={busy}
-        onPress={() => action(exportData)}
-      />
-      <Copy muted style={{ fontSize: 12 }}>
-        JSON metadata only. Photos are not included; this is not a full backup.
-      </Copy>
-      <Button
-        secondary
-        title="Restore missing demo items"
-        disabled={busy}
-        onPress={() => action(() => repository.seedDemo())}
-      />
-      <Copy muted style={{ fontSize: 12 }}>
-        Adds missing samples without replacing your items or edited samples.
-      </Copy>
-      <Button
-        danger
-        title="Clear all saved data"
-        disabled={busy}
-        onPress={() => {
-          void confirm(
-            'Clear all saved data?',
-            'All items, places, and location history will be removed from this device. This cannot be undone.',
-          ).then((yes) => {
-            if (yes) action(() => repository.clear());
-          });
-        }}
-      />
+      <Panel>
+        <SelectionRow
+          title="Export item metadata"
+          subtitle="Share JSON details. Photos are not included."
+          icon="download-outline"
+          disabled={busy}
+          onPress={() => action(exportData)}
+        />
+        <View style={{ height: 1, backgroundColor: colors.border }} />
+        <SelectionRow
+          title="Restore missing demo items"
+          subtitle="Add sample memories without replacing your items."
+          icon="sparkles-outline"
+          disabled={busy}
+          onPress={() => action(() => repository.seedDemo())}
+        />
+        <View style={{ height: 1, backgroundColor: colors.border }} />
+        <SelectionRow
+          danger
+          title="Clear all saved data"
+          subtitle="Permanently remove items, places, folders, shortcuts, and history."
+          icon="trash-outline"
+          disabled={busy}
+          onPress={() => {
+            void confirm(
+              'Clear all saved data?',
+              'All items, places, folders, Quick Access shortcuts, and location history will be removed from this device. This cannot be undone.',
+            ).then((yes) => {
+              if (yes) action(() => repository.clear());
+            });
+          }}
+        />
+      </Panel>
       <ErrorMessage message={error} />
+      <Section title="About" />
+      <Panel>
+        <SelectionRow
+          title="How to organize your items"
+          subtitle="Places, folders, and categories explained."
+          icon="help-circle-outline"
+          onPress={() => router.push('/about')}
+        />
+      </Panel>
     </Screen>
   );
 }

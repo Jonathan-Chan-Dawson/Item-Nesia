@@ -33,7 +33,8 @@
           "photosPermission": "Allow Item-Nesia to choose photos for your saved memories.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

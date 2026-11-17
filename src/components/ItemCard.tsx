@@ -7,36 +7,94 @@ import type { Item } from '../types/models';
 import { locationLabel } from '../utils/memory';
 import { Copy, Icon, type IconName } from './ui';
 
-const icons: Record<string, IconName> = {
-  Electronics: 'headset-outline',
-  Documents: 'document-text-outline',
-  Accessories: 'wallet-outline',
-  Clothing: 'shirt-outline',
-  Household: 'home-outline',
-  Tools: 'hammer-outline',
-  Hobbies: 'game-controller-outline',
+const categoryArt: Record<
+  string,
+  { icon: IconName; light: string; ink: string; dark: string }
+> = {
+  Electronics: {
+    icon: 'headset-outline',
+    light: '#E9EAEF',
+    ink: '#5D637F',
+    dark: '#2D303D',
+  },
+  Documents: {
+    icon: 'document-text-outline',
+    light: '#F3EAD8',
+    ink: '#967448',
+    dark: '#3C3427',
+  },
+  Accessories: {
+    icon: 'wallet-outline',
+    light: '#E0ECEA',
+    ink: '#4F7F75',
+    dark: '#273D37',
+  },
+  Clothing: {
+    icon: 'shirt-outline',
+    light: '#EFE4E3',
+    ink: '#A06A66',
+    dark: '#3F2E2C',
+  },
+  Household: {
+    icon: 'home-outline',
+    light: '#E7EBD9',
+    ink: '#75804D',
+    dark: '#343B28',
+  },
+  'Kitchen & Dining': {
+    icon: 'restaurant-outline',
+    light: '#F2E7DB',
+    ink: '#8A6C48',
+    dark: '#3B3126',
+  },
+  Tools: {
+    icon: 'hammer-outline',
+    light: '#F0E5D9',
+    ink: '#97714A',
+    dark: '#3C3227',
+  },
+  Hobbies: {
+    icon: 'game-controller-outline',
+    light: '#EAE4EE',
+    ink: '#826893',
+    dark: '#362C3E',
+  },
 };
+function itemIcon(item: Item): IconName {
+  if (/cable/i.test(item.name)) return 'git-merge-outline';
+  if (/battery|charger/i.test(item.name)) return 'battery-charging-outline';
+  if (/keys/i.test(item.name)) return 'key-outline';
+  if (/\bphone\b/i.test(item.name)) return 'phone-portrait-outline';
+  if (/glasses/i.test(item.name)) return 'glasses-outline';
+  if (/drive/i.test(item.name)) return 'save-outline';
+  if (/receipt/i.test(item.name)) return 'receipt-outline';
+  return categoryArt[item.category ?? '']?.icon ?? 'cube-outline';
+}
 export function ItemPhoto({
   item,
-  height = 150,
+  height = 142,
 }: {
   item: Item;
   height?: number;
 }) {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const [failed, setFailed] = useState<string>();
+  const art =
+    categoryArt[item.category ?? 'Accessories'] ?? categoryArt.Accessories;
+  const hasPhoto = item.photoUri && failed !== item.photoUri;
+  const small = height < 100;
   return (
     <View
       style={{
         height,
-        borderRadius: 18,
-        backgroundColor: colors.soft,
+        borderRadius: small ? 14 : 16,
+        backgroundColor: dark ? art.dark : art.light,
         overflow: 'hidden',
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      {item.photoUri && failed !== item.photoUri ? (
+      {hasPhoto ? (
         <Image
           source={{ uri: item.photoUri }}
           style={{ width: '100%', height: '100%' }}
@@ -46,13 +104,47 @@ export function ItemPhoto({
         />
       ) : (
         <>
-          <Icon
-            name={icons[item.category ?? ''] ?? 'cube-outline'}
-            size={height > 180 ? 70 : 44}
-          />
-          <Copy muted style={{ fontSize: 10, marginTop: 8, letterSpacing: 1 }}>
-            {item.isDemo ? 'DEMO ITEM' : 'NO PHOTO'}
-          </Copy>
+          {!small && (
+            <View
+              style={{
+                position: 'absolute',
+                width: 160,
+                height: 160,
+                borderRadius: 80,
+                backgroundColor: dark ? '#FFFFFF05' : '#FFFFFF55',
+                right: -55,
+                top: -65,
+              }}
+            />
+          )}
+          <View
+            style={{
+              transform: [{ rotate: small ? '0deg' : '-8deg' }],
+              borderRadius: 22,
+              padding: small ? 6 : 16,
+              backgroundColor: dark ? '#FFFFFF08' : '#FFFFFF66',
+            }}
+          >
+            <Icon
+              name={itemIcon(item)}
+              size={small ? 30 : height > 180 ? 72 : 49}
+              color={dark ? colors.secondary : art.ink}
+            />
+          </View>
+          {!small && (
+            <Copy
+              muted
+              style={{
+                position: 'absolute',
+                bottom: 9,
+                fontSize: 9,
+                letterSpacing: 1,
+                lineHeight: 14,
+              }}
+            >
+              {item.isDemo ? 'SAMPLE ITEM' : 'ADD A PHOTO ANYTIME'}
+            </Copy>
+          )}
         </>
       )}
     </View>
@@ -71,27 +163,72 @@ export function ItemCard({ item, list }: { item: Item; list?: boolean }) {
       style={({ pressed }) => ({
         flex: 1,
         backgroundColor: colors.surface,
-        padding: 10,
-        borderRadius: 22,
+        padding: 7,
+        borderRadius: 21,
         borderWidth: 1,
         borderColor: colors.border,
-        opacity: pressed ? 0.65 : 1,
+        opacity: pressed ? 0.75 : 1,
+        transform: [{ scale: pressed ? 0.98 : 1 }],
         flexDirection: list ? 'row' : 'column',
-        gap: 12,
+        gap: list ? 12 : 0,
+        boxShadow: `0px 3px 12px ${colors.shadow}`,
       })}
     >
-      <View style={list ? { width: 78 } : undefined}>
-        <ItemPhoto item={item} height={list ? 78 : 150} />
+      <View style={list ? { width: 72 } : undefined}>
+        <ItemPhoto item={item} height={list ? 76 : 142} />
+        {!list && item.isFavorite && (
+          <View
+            style={{
+              position: 'absolute',
+              right: 8,
+              top: 8,
+              borderRadius: 12,
+              padding: 5,
+              backgroundColor: colors.surface,
+            }}
+          >
+            <Icon name="heart" size={12} />
+          </View>
+        )}
       </View>
-      <View style={{ flex: 1, gap: 4, padding: 4 }}>
+      <View
+        style={{
+          flex: 1,
+          gap: 5,
+          paddingHorizontal: list ? 0 : 5,
+          paddingVertical: list ? 9 : 12,
+          justifyContent: 'center',
+        }}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-          <Copy style={{ fontWeight: '700', flex: 1 }}>{item.name}</Copy>
-          {item.isFavorite && <Icon name="heart" size={14} />}
+          <Copy
+            numberOfLines={2}
+            style={{ fontWeight: '700', fontSize: 14, lineHeight: 19, flex: 1 }}
+          >
+            {item.name}
+          </Copy>
+          {list && item.isFavorite && <Icon name="heart" size={13} />}
         </View>
-        <Copy muted style={{ fontSize: 12, lineHeight: 18 }}>
-          {locationLabel(item, data.places)}
-        </Copy>
+        <View
+          style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}
+        >
+          <View style={{ marginTop: 2 }}>
+            <Icon name="location-outline" size={11} color={colors.secondary} />
+          </View>
+          <Copy
+            muted
+            numberOfLines={2}
+            style={{ fontSize: 11, lineHeight: 16, flex: 1 }}
+          >
+            {locationLabel(item, data.places)}
+          </Copy>
+        </View>
       </View>
+      {list && (
+        <View style={{ justifyContent: 'center', paddingRight: 6 }}>
+          <Icon name="chevron-forward" size={15} color={colors.secondary} />
+        </View>
+      )}
     </Pressable>
   );
 }

@@ -1,80 +1,82 @@
-import { useLocalSearchParams, router } from 'expo-router';
-import {
-  Button,
-  Copy,
-  Empty,
-  Header,
-  IconButton,
-  Panel,
-  Screen,
-  Section,
-} from '../../components/ui';
-import { ItemCard } from '../../components/ItemCard';
+import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Copy, Empty, ErrorMessage, Header, Screen } from '../../components/ui';
+import { OverflowMenu } from '../../components/OverflowMenu';
+import { PlaceCard } from '../../components/PlaceCard';
+import { ItemBrowser } from '../../features/ItemBrowser';
 import { useMemory } from '../../hooks/useMemory';
 import { placePath } from '../../utils/memory';
-
 export default function PlaceDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data } = useMemory();
+  const { data, repository } = useMemory();
+  const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const place = data.places.find((p) => p.id === id);
+  const pinned = data.settings.quickAccess.some(
+    (ref) => ref.kind === 'place' && ref.id === id,
+  );
   if (!place)
     return (
       <Screen>
         <Header title="Place unavailable" />
         <Empty
           title="This place isn’t here."
-          message="Choose another place from My Places."
+          message="Choose another place from Places."
         />
       </Screen>
     );
-  const children = data.places.filter((p) => p.parentId === id);
-  const items = data.items.filter((i) => i.placeId === id && !i.isArchived);
   return (
-    <Screen>
+    <Screen scroll={false}>
       <Header
         title={place.name}
         right={
-          <IconButton
-            label="Edit place"
-            icon="create-outline"
-            onPress={() =>
-              router.push({ pathname: '/places/edit/[id]', params: { id } })
-            }
+          <OverflowMenu
+            title="Place"
+            options={[
+              { value: 'add', label: 'Remember an item here', icon: 'add' },
+              { value: 'edit', label: 'Edit place', icon: 'create-outline' },
+              {
+                value: 'pin',
+                label: pinned ? 'Remove from Quick Access' : 'Pin to Home',
+                icon: 'star-outline',
+              },
+            ]}
+            onSelect={(value) => {
+              if (value === 'edit')
+                router.push({ pathname: '/places/edit/[id]', params: { id } });
+              if (value === 'add')
+                router.push({ pathname: '/capture', params: { placeId: id } });
+              if (value === 'pin')
+                void repository
+                  .toggleShortcut({ kind: 'place', id })
+                  .then(() =>
+                    setNotice(pinned ? 'Shortcut removed.' : 'Pinned to Home.'),
+                  )
+                  .catch((e) => setError(e.message));
+            }}
           />
         }
       />
-      <Panel>
-        <Copy title>{place.name}</Copy>
-        <Copy muted>{placePath(place.id, data.places)}</Copy>
-      </Panel>
-      {children.length > 0 && (
-        <>
-          <Section title="Inside this place" />
-          {children.map((child) => (
-            <Button
-              key={child.id}
-              title={child.name}
-              secondary
-              icon="file-tray-outline"
-              onPress={() =>
-                router.push({
-                  pathname: '/places/[id]',
-                  params: { id: child.id },
-                })
-              }
-            />
-          ))}
-        </>
-      )}
-      <Section title="Items stored here" />
-      {items.length ? (
-        items.map((item) => <ItemCard key={item.id} item={item} list />)
-      ) : (
-        <Empty
-          title="A place for something good."
-          message="Items assigned directly to this place will appear here. Open a child place to see what’s inside."
-        />
-      )}
+      <Copy muted style={{ fontSize: 12 }}>
+        {placePath(id, data.places)}
+      </Copy>
+      <ErrorMessage message={error} />
+      {notice && <Copy style={{ fontSize: 12 }}>{notice}</Copy>}
+      <ItemBrowser
+        key={id}
+        forceList
+        scopePlaceId={id}
+        leading={data.places
+          .filter((p) => p.parentId === id)
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((child) => ({
+            id: child.id,
+            render: () => <PlaceCard place={child} />,
+          }))}
+        onAdd={() =>
+          router.push({ pathname: '/capture', params: { placeId: id } })
+        }
+      />
     </Screen>
   );
 }
