@@ -6,11 +6,18 @@ import {
   type Place,
   type Settings,
   type QuickAccessRef,
+  type LocationSnapshot,
 } from '../types/models';
 import type { StorageAdapter } from '../database/storage.types';
-import { withDemo } from '../database/demo';
+import { withDemo, organizeDemo } from '../database/demo';
 import { newId, validateParent } from '../utils/memory';
-import { validateBackupData } from '../utils/backup';
+import {
+  cleanPosition,
+  locationSnapshot,
+  locationKey,
+  locationDraft,
+} from '../utils/locations';
+import { validateBackupData, photoReferences } from '../utils/backup';
 import { normalizeSettings } from '../utils/preferences';
 
 /** Serializes all mutations and publishes only after durable storage succeeds. */
@@ -34,15 +41,8 @@ export class MemoryRepository {
       change(draft);
       draft.settings = normalizeSettings(draft.settings, draft);
       await this.adapter.save(draft);
-      const photos = (value: MemoryData) =>
-        new Set(
-          [
-            ...value.items.flatMap((i) => [i.photoUri, i.locationPhotoUri]),
-            ...value.places.map((p) => p.coverPhotoUri),
-          ].filter((uri): uri is string => !!uri),
-        );
-      const previousPhotos = photos(this.data);
-      const nextPhotos = photos(draft);
+      const previousPhotos = new Set(photoReferences(this.data));
+      const nextPhotos = new Set(photoReferences(draft));
       this.data = draft;
       this.publish(draft);
       // Shared references remain intact. A cleanup failure must not undo a durable save.
@@ -56,61 +56,144 @@ export class MemoryRepository {
     this.queue = pending.catch(() => {});
     return pending;
   }
+  private saveDraft(data: MemoryData, draft: ItemDraft, id: string) {
+    draft = { ...draft, exactSpot: cleanPosition(draft.exactSpot) };
+    if (!draft.name.trim()) throw new Error('Give your item a name.');
+    if (!draft.placeId && !draft.exactSpot?.trim())
+      throw new Error('Choose a place or describe the exact spot.');
+    if (draft.placeId && !data.places.some((p) => p.id === draft.placeId))
+      throw new Error('That place no longer exists. Choose another.');
+    if (
+      draft.folderId &&
+      !data.folders.some((folder) => folder.id === draft.folderId)
+    )
+      throw new Error('That folder no longer exists.');
+    const pin = [draft.locationPinX, draft.locationPinY];
+    if (
+      pin.some((v) => v !== undefined) &&
+      (!draft.locationPhotoUri ||
+        pin.some(
+          (v) => v === undefined || !Number.isFinite(v) || v < 0 || v > 1,
+        ))
+    )
+      throw new Error('Choose a valid spot on the location photo.');
+    const previous = data.items.find((item) => item.id === id);
+    if (previous?.deletedAt)
+      throw new Error('Restore this item from Trash before editing it.');
+    const now = new Date().toISOString();
+    const moved =
+      !previous ||
+      locationKey(locationSnapshot(previous, data.places)) !==
+        locationKey(locationSnapshot(draft, data.places));
+    const historyId = moved ? newId() : undefined;
+    const item: Item = {
+      ...previous,
+      ...draft,
+      id,
+      name: draft.name.trim(),
+      isFavorite: previous?.isFavorite ?? false,
+      isArchived: previous?.isArchived ?? false,
+      createdAt: previous?.createdAt ?? now,
+      updatedAt: now,
+      locationUpdatedAt: moved ? now : previous.locationUpdatedAt,
+    };
+    data.items = [...data.items.filter((i) => i.id !== id), item];
+    if (moved)
+      data.history.unshift({
+        id: historyId!,
+        previousLocation: previous
+          ? locationSnapshot(previous, data.places)
+          : undefined,
+        newLocation: locationSnapshot(item, data.places),
+        previousLocationUpdatedAt: previous?.locationUpdatedAt,
+        itemId: id,
+        previousPlaceId: previous?.placeId,
+        previousSpot: previous?.exactSpot,
+        newPlaceId: item.placeId,
+        newSpot: item.exactSpot,
+        changedAt: now,
+      });
+    return historyId;
+  }
   async saveItem(draft: ItemDraft, id = newId()): Promise<string> {
     await this.mutate((data) => {
-      if (!draft.name.trim()) throw new Error('Give your item a name.');
-      if (!draft.placeId && !draft.exactSpot?.trim())
-        throw new Error('Choose a place or describe the exact spot.');
-      if (draft.placeId && !data.places.some((p) => p.id === draft.placeId))
-        throw new Error('That place no longer exists. Choose another.');
-      if (
-        draft.folderId &&
-        !data.folders.some((folder) => folder.id === draft.folderId)
-      )
-        throw new Error('That folder no longer exists.');
-      const pin = [draft.locationPinX, draft.locationPinY];
-      if (
-        pin.some((v) => v !== undefined) &&
-        (!draft.locationPhotoUri ||
-          pin.some(
-            (v) => v === undefined || !Number.isFinite(v) || v < 0 || v > 1,
-          ))
-      )
-        throw new Error('Choose a valid spot on the location photo.');
-      const previous = data.items.find((item) => item.id === id);
-      const now = new Date().toISOString();
-      const moved =
-        !previous ||
-        previous.placeId !== draft.placeId ||
-        previous.exactSpot !== draft.exactSpot ||
-        previous.locationPhotoUri !== draft.locationPhotoUri ||
-        previous.locationPinX !== draft.locationPinX ||
-        previous.locationPinY !== draft.locationPinY;
-      const item: Item = {
-        ...previous,
-        ...draft,
-        id,
-        name: draft.name.trim(),
-        isFavorite: previous?.isFavorite ?? false,
-        isArchived: previous?.isArchived ?? false,
-        createdAt: previous?.createdAt ?? now,
-        updatedAt: now,
-        locationUpdatedAt: moved ? now : previous.locationUpdatedAt,
-      };
-      data.items = [...data.items.filter((i) => i.id !== id), item];
-      if (moved)
-        data.history.unshift({
-          id: newId(),
-          itemId: id,
-          previousPlaceId: previous?.placeId,
-          previousSpot: previous?.exactSpot,
-          newPlaceId: item.placeId,
-          newSpot: item.exactSpot,
-          changedAt: now,
-        });
+      this.saveDraft(data, draft, id);
     });
     return id;
   }
+  async moveItem(
+    id: string,
+    destination: LocationSnapshot,
+    expected: { updatedAt: string; key: string },
+  ) {
+    let historyId: string | undefined;
+    await this.mutate((data) => {
+      const item = data.items.find((item) => item.id === id);
+      if (!item || item.deletedAt) throw new Error('This item is unavailable.');
+      if (
+        item.locationUpdatedAt !== expected.updatedAt ||
+        locationKey(locationSnapshot(item, data.places)) !== expected.key
+      )
+        throw new Error(
+          'The location changed while this screen was open. Reopen Move to use its latest location.',
+        );
+      historyId = this.saveDraft(
+        data,
+        { ...item, ...locationDraft(destination) },
+        id,
+      );
+    });
+    return { historyId, changed: !!historyId };
+  }
+  undoMove(itemId: string, historyId: string) {
+    return this.mutate((data) => {
+      const item = data.items.find((item) => item.id === itemId);
+      const entry = data.history.find((entry) => entry.itemId === itemId);
+      if (
+        !item ||
+        item.deletedAt ||
+        !entry ||
+        entry.id !== historyId ||
+        !entry.previousLocation ||
+        !entry.newLocation ||
+        !entry.previousLocationUpdatedAt ||
+        item.locationUpdatedAt !== entry.changedAt ||
+        locationKey(locationSnapshot(item, data.places)) !==
+          locationKey(entry.newLocation)
+      )
+        throw new Error(
+          'Undo is no longer available because the location or history changed.',
+        );
+      if (
+        entry.previousLocation.placeId &&
+        !data.places.some(
+          (place) => place.id === entry.previousLocation!.placeId,
+        )
+      )
+        throw new Error('The previous place is unavailable.');
+      Object.assign(item, locationDraft(entry.previousLocation), {
+        locationUpdatedAt: entry.previousLocationUpdatedAt,
+      });
+      data.history = data.history.filter((history) => history.id !== historyId);
+    });
+  }
+  deleteHistoryEntry(itemId: string, historyId: string) {
+    return this.mutate((data) => {
+      if (!data.items.some((item) => item.id === itemId))
+        throw new Error('This item is unavailable.');
+      data.history = data.history.filter(
+        (entry) => !(entry.itemId === itemId && entry.id === historyId),
+      );
+    });
+  }
+  clearHistory(itemId: string) {
+    return this.mutate((data) => {
+      if (!data.items.some((item) => item.id === itemId))
+        throw new Error('This item is unavailable.');
+      data.history = data.history.filter((entry) => entry.itemId !== itemId);
+    });
+  }
+
   updateItem(
     id: string,
     patch: Partial<Pick<Item, 'isFavorite' | 'isArchived'>>,
@@ -118,7 +201,32 @@ export class MemoryRepository {
     return this.mutate((data) => {
       const item = data.items.find((i) => i.id === id);
       if (!item) throw new Error('This item no longer exists.');
+      if (item.deletedAt)
+        throw new Error('Restore this item from Trash first.');
       Object.assign(item, patch, { updatedAt: new Date().toISOString() });
+    });
+  }
+  trashItem(id: string) {
+    return this.mutate((data) => {
+      const item = data.items.find((i) => i.id === id);
+      if (!item) throw new Error('This item no longer exists.');
+      item.deletedAt ??= new Date().toISOString();
+    });
+  }
+  restoreItem(id: string) {
+    return this.mutate((data) => {
+      const item = data.items.find((i) => i.id === id);
+      if (!item) throw new Error('This item no longer exists.');
+      delete item.deletedAt;
+    });
+  }
+  emptyTrash() {
+    return this.mutate((data) => {
+      const ids = new Set(
+        data.items.filter((i) => i.deletedAt).map((i) => i.id),
+      );
+      data.items = data.items.filter((i) => !ids.has(i.id));
+      data.history = data.history.filter((h) => !ids.has(h.itemId));
     });
   }
   deleteItem(id: string) {
@@ -127,7 +235,12 @@ export class MemoryRepository {
       data.history = data.history.filter((h) => h.itemId !== id);
     });
   }
-  async savePlace(name: string, parentId?: string, id = newId()) {
+  async savePlace(
+    name: string,
+    parentId?: string,
+    id = newId(),
+    icon?: string,
+  ) {
     await this.mutate((data) => {
       if (!name.trim()) throw new Error('Give your place a name.');
       validateParent(id, parentId, data.places);
@@ -137,6 +250,7 @@ export class MemoryRepository {
         ...old,
         id,
         name: name.trim(),
+        icon: icon === undefined ? old?.icon : icon || undefined,
         parentId,
         createdAt: old?.createdAt ?? now,
         updatedAt: now,
@@ -171,6 +285,8 @@ export class MemoryRepository {
     return this.mutate((data) => {
       const item = data.items.find((i) => i.id === id);
       if (!item) throw new Error('This item no longer exists.');
+      if (item.deletedAt)
+        throw new Error('Restore this item from Trash before duplicating it.');
       duplicateId = newId();
       const now = new Date().toISOString();
       data.items.push({
@@ -185,6 +301,7 @@ export class MemoryRepository {
       data.history.unshift({
         id: newId(),
         itemId: duplicateId,
+        newLocation: locationSnapshot(item, data.places),
         newPlaceId: item.placeId,
         newSpot: item.exactSpot,
         changedAt: now,
@@ -201,7 +318,12 @@ export class MemoryRepository {
       Object.assign(draft, JSON.parse(JSON.stringify(checked)));
     });
   }
-  async saveFolder(name: string, parentId?: string, id = newId()) {
+  async saveFolder(
+    name: string,
+    parentId?: string,
+    id = newId(),
+    icon?: string,
+  ) {
     await this.mutate((data) => {
       if (!name.trim()) throw new Error('Give your folder a name.');
       const seen = new Set([id]);
@@ -221,6 +343,7 @@ export class MemoryRepository {
         {
           id,
           name: name.trim(),
+          icon: icon === undefined ? old?.icon : icon || undefined,
           parentId,
           createdAt: old?.createdAt ?? now,
           updatedAt: now,
@@ -238,6 +361,11 @@ export class MemoryRepository {
       for (const child of data.folders)
         if (child.parentId === id) child.parentId = folder.parentId;
       data.folders = data.folders.filter((f) => f.id !== id);
+    });
+  }
+  organizeSamples() {
+    return this.mutate((data) => {
+      Object.assign(data, organizeDemo(data));
     });
   }
   seedDemo() {

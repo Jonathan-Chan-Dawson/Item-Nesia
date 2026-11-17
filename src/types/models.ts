@@ -8,9 +8,18 @@ export const categories = [
   'Tools',
   'Hobbies',
   'Other',
+  'Personal Care',
+  'Health & Wellness',
+  'Sports & Outdoors',
+  'Stationery',
+  'Pet Supplies',
+  'Cleaning & Laundry',
+  'Seasonal',
 ] as const;
 export type Category = (typeof categories)[number];
 export interface Item {
+  icon?: string;
+  deletedAt?: string;
   id: string;
   name: string;
   description?: string;
@@ -43,13 +52,25 @@ export interface Place {
   updatedAt: string;
 }
 export interface Folder {
+  icon?: string;
   id: string;
   name: string;
   parentId?: string;
   createdAt: string;
   updatedAt: string;
 }
+export interface LocationSnapshot {
+  placeId?: string;
+  path: string;
+  position?: string;
+  photoUri?: string;
+  pinX?: number;
+  pinY?: number;
+}
 export interface LocationHistory {
+  previousLocation?: LocationSnapshot;
+  newLocation?: LocationSnapshot;
+  previousLocationUpdatedAt?: string;
   id: string;
   itemId: string;
   previousPlaceId?: string;
@@ -60,8 +81,11 @@ export interface LocationHistory {
   note?: string;
 }
 export interface Settings {
+  reduceAnimations?: boolean;
+  inventoryGroupBy?: 'items' | 'folders' | 'places' | 'categories';
   theme: 'system' | 'light' | 'dark';
   defaultItemsView: 'grid' | 'list';
+  homeItemsView?: 'grid' | 'list';
   hapticsEnabled: boolean;
   onboardingCompleted: boolean;
   demoInitialized: boolean;
@@ -81,6 +105,7 @@ export interface MemoryData {
 export type ItemDraft = Pick<
   Item,
   | 'name'
+  | 'icon'
   | 'description'
   | 'category'
   | 'aliases'
@@ -96,6 +121,7 @@ export type ItemDraft = Pick<
 export const defaultSettings: Settings = {
   theme: 'system',
   defaultItemsView: 'grid',
+  homeItemsView: 'grid',
   hapticsEnabled: true,
   onboardingCompleted: false,
   demoInitialized: false,

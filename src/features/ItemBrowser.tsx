@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { TrashUndo } from '../components/TrashUndo';
+import { useRef, useState, type ReactNode, type ComponentRef } from 'react';
 import {
   FlatList,
+  Keyboard,
   Pressable,
   ScrollView,
   View,
@@ -8,28 +10,50 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useMemory, useTheme } from '../hooks/useMemory';
-import { categories, type Category, type Item } from '../types/models';
-import { queryInventory, type InventoryQuery } from '../utils/inventory';
+import {
+  queryInventory,
+  groupInventory,
+  type GroupBy,
+  type InventoryQuery,
+} from '../utils/inventory';
+import type { Item } from '../types/models';
 import { folderPath } from '../utils/folders';
 import { placePath } from '../utils/memory';
-import { ChoiceSheet, SearchBox, type Choice } from '../components/controls';
-import { Button, Copy, Empty, Icon, IconButton, s } from '../components/ui';
+import {
+  ChoiceSheet,
+  SearchBox,
+  SegmentedChoice,
+  type Choice,
+} from '../components/controls';
+import {
+  Button,
+  Copy,
+  Empty,
+  ErrorMessage,
+  Icon,
+  s,
+  confirm,
+} from '../components/ui';
 import { ItemCard } from '../components/ItemCard';
-type Sheet = 'filters' | 'view' | 'category' | 'place' | 'folder' | 'sort';
-type BrowserRow =
-  | { kind: 'item'; item: Item }
+import { FilterPanel } from '../components/FilterPanel';
+import { SurpriseButton } from '../components/SurpriseButton';
+import { Reveal } from '../components/Reveal';
+type Row =
+  | { kind: 'items'; id: string; items: Item[] }
+  | { kind: 'group'; id: string; label: string; count: number }
   | { kind: 'leading'; id: string; render(): ReactNode };
 const sorts: Choice[] = [
-  { value: 'relevance', label: 'Best match', icon: 'search-outline' },
-  { value: 'recent', label: 'Recently added', icon: 'add-circle-outline' },
-  { value: 'moved', label: 'Recently moved', icon: 'swap-horizontal-outline' },
-  { value: 'name', label: 'Alphabetical', icon: 'text-outline' },
-  { value: 'oldest', label: 'Oldest first', icon: 'time-outline' },
+  { value: 'relevance', label: 'Best match' },
+  { value: 'recent', label: 'Recently added' },
+  { value: 'moved', label: 'Recently moved' },
+  { value: 'name', label: 'Alphabetical' },
+  { value: 'oldest', label: 'Oldest first' },
 ];
-const views: Choice[] = [
-  { value: 'all', label: 'All Active' },
-  { value: 'favorites', label: 'Favorites', icon: 'heart-outline' },
-  { value: 'archived', label: 'Archived', icon: 'archive-outline' },
+const groupChoices: Choice[] = [
+  { value: 'items', label: 'Items' },
+  { value: 'folders', label: 'Folders' },
+  { value: 'places', label: 'Places' },
+  { value: 'categories', label: 'Categories' },
 ];
 export function ItemBrowser({
   initialView = 'all',
@@ -54,17 +78,33 @@ export function ItemBrowser({
   emptyMessage?: string;
   onAdd?(): void;
 }) {
-  const { data } = useMemory();
+  const { data, repository } = useMemory();
   const { colors } = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const [query, setQuery] = useState<InventoryQuery>({
     text: initialText,
     view: initialView,
     includeDescendants: !scopeFolderId,
+    includeSubplaces: true,
+    includeSubfolders: !scopeFolderId,
     sort: initialText ? 'relevance' : 'recent',
     layout: forceList ? 'list' : data.settings.defaultItemsView,
   });
-  const [sheet, setSheet] = useState<Sheet>();
+  const [groupBy, setGroupBy] = useState<GroupBy>(
+    scopePlaceId || scopeFolderId
+      ? 'items'
+      : (data.settings.inventoryGroupBy ?? 'items'),
+  );
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [sortOpen, setSortOpen] = useState(false);
+  const [anchor, setAnchor] = useState<{
+    x: number;
+    y: number;
+    height: number;
+  }>();
+  const [trashed, setTrashed] = useState<Item>();
+  const [error, setError] = useState<string>();
+  const toolbar = useRef<ComponentRef<typeof View>>(null);
   const change = (patch: Partial<InventoryQuery>) =>
     setQuery((previous) => ({ ...previous, ...patch }));
   const effective = {
@@ -73,33 +113,48 @@ export function ItemBrowser({
     folderId: scopeFolderId ?? query.folderId,
   };
   const items = queryInventory(data, effective);
-  const rows: BrowserRow[] = [
-    ...(query.text.trim() ||
-    query.category ||
-    query.placeId ||
-    query.folderId ||
-    query.view !== 'all'
-      ? []
-      : leading
-    ).map((row) => ({ ...row, kind: 'leading' as const })),
-    ...items.map((item) => ({ kind: 'item' as const, item })),
-  ];
   const columns =
     query.layout === 'list' || width < 350 || fontScale > 1.3 ? 1 : 2;
+  const groups = groupInventory(items, data, groupBy);
+  const rows: Row[] = [];
+  if (
+    groupBy === 'items' &&
+    !query.text.trim() &&
+    !query.category &&
+    !query.placeId &&
+    !query.folderId &&
+    query.view === 'all'
+  )
+    rows.push(...leading.map((row) => ({ ...row, kind: 'leading' as const })));
+  const addItems = (values: Item[], prefix: string) => {
+    for (let index = 0; index < values.length; index += columns)
+      rows.push({
+        kind: 'items',
+        id: `${prefix}:${index}`,
+        items: values.slice(index, index + columns),
+      });
+  };
+  if (groupBy === 'items') addItems(items, 'all');
+  else
+    for (const group of groups) {
+      rows.push({
+        kind: 'group',
+        id: group.id,
+        label: group.label,
+        count: group.items.length,
+      });
+      if (!collapsed[`${groupBy}:${group.id}`]) addItems(group.items, group.id);
+    }
   const reset = () =>
     change({
-      view: 'all',
+      view: initialView === 'trash' ? 'trash' : 'all',
       category: undefined,
       placeId: undefined,
       folderId: undefined,
-      includeDescendants: !scopeFolderId,
+      includeSubplaces: true,
+      includeSubfolders: !scopeFolderId,
     });
   const chips: { label: string; clear(): void }[] = [];
-  if (query.view !== 'all')
-    chips.push({
-      label: query.view === 'favorites' ? 'Favorites' : 'Archived',
-      clear: () => change({ view: 'all' }),
-    });
   if (query.category)
     chips.push({
       label:
@@ -120,108 +175,26 @@ export function ItemBrowser({
       clear: () => change({ folderId: undefined }),
     });
   if (
-    !query.includeDescendants &&
-    (effective.placeId ||
-      (effective.folderId && effective.folderId !== 'unfiled'))
+    effective.placeId &&
+    !(query.includeSubplaces ?? query.includeDescendants)
   )
     chips.push({
-      label: 'Direct items only',
-      clear: () => change({ includeDescendants: true }),
+      label: 'Direct place only',
+      clear: () => change({ includeSubplaces: true }),
     });
-  const options: Choice[] =
-    sheet === 'view'
-      ? views
-      : sheet === 'sort'
-        ? sorts
-        : sheet === 'category'
-          ? [
-              { value: '', label: 'All categories' },
-              { value: 'uncategorized', label: 'Uncategorized' },
-              ...categories.map((category) => ({
-                value: category,
-                label: category,
-              })),
-            ]
-          : sheet === 'place'
-            ? [
-                { value: '', label: 'All places' },
-                ...data.places.map((place) => ({
-                  value: place.id,
-                  label: placePath(place.id, data.places),
-                  icon: 'location-outline' as const,
-                })),
-              ]
-            : sheet === 'folder'
-              ? [
-                  { value: '', label: 'All folders' },
-                  { value: 'unfiled', label: 'Unfiled' },
-                  ...data.folders.map((folder) => ({
-                    value: folder.id,
-                    label: folderPath(folder.id, data.folders),
-                    icon: 'folder-outline' as const,
-                  })),
-                ]
-              : [
-                  {
-                    value: 'view',
-                    label: `View: ${views.find((view) => view.value === query.view)?.label}`,
-                  },
-                  {
-                    value: 'category',
-                    label: `Category: ${query.category ?? 'All'}`,
-                  },
-                  ...(!scopePlaceId
-                    ? [
-                        {
-                          value: 'place',
-                          label: `Place: ${placePath(query.placeId, data.places) || 'All'}`,
-                        },
-                      ]
-                    : []),
-                  ...(!scopeFolderId
-                    ? [
-                        {
-                          value: 'folder',
-                          label: `Folder: ${query.folderId === 'unfiled' ? 'Unfiled' : folderPath(query.folderId, data.folders) || 'All'}`,
-                        },
-                      ]
-                    : []),
-                  ...(effective.placeId ||
-                  (effective.folderId && effective.folderId !== 'unfiled')
-                    ? [
-                        {
-                          value: 'descendants',
-                          label: query.includeDescendants
-                            ? 'Show only items directly here'
-                            : 'Include subplaces / subfolders',
-                        },
-                      ]
-                    : []),
-                  {
-                    value: 'reset',
-                    label: 'Reset filters',
-                    icon: 'refresh-outline',
-                  },
-                ];
-  const selected =
-    sheet === 'view'
-      ? query.view
-      : sheet === 'sort'
-        ? query.sort
-        : sheet === 'category'
-          ? (query.category ?? '')
-          : sheet === 'place'
-            ? (query.placeId ?? '')
-            : sheet === 'folder'
-              ? (query.folderId ?? '')
-              : undefined;
-  const activeScope = scopePlaceId
-    ? `In ${placePath(scopePlaceId, data.places)}`
-    : scopeFolderId === 'unfiled'
-      ? 'Unfiled items'
-      : scopeFolderId
-        ? `In ${folderPath(scopeFolderId, data.folders)}`
-        : 'All items';
+  if (
+    effective.folderId &&
+    effective.folderId !== 'unfiled' &&
+    !(query.includeSubfolders ?? query.includeDescendants)
+  )
+    chips.push({
+      label: 'Direct folder only',
+      clear: () => change({ includeSubfolders: true }),
+    });
+  const run = (work: Promise<unknown>) => {
+    setError(undefined);
+    void work.catch((e) => setError(e.message));
+  };
   return (
     <View style={{ flex: 1, gap: 12 }}>
       <SearchBox
@@ -234,192 +207,323 @@ export function ItemBrowser({
         }
         autoFocus={autoFocus}
       />
-      <View style={[s.row, { gap: 8 }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Filter items"
-          onPress={() => setSheet('filters')}
-          style={[
-            s.row,
-            {
-              minHeight: 44,
-              gap: 6,
-              paddingHorizontal: 12,
-              backgroundColor: colors.soft,
-              borderRadius: 12,
-            },
-          ]}
-        >
-          <Icon name="options-outline" size={17} />
-          <Copy style={{ fontSize: 12, fontWeight: '600' }}>
-            Filters{chips.length ? ` · ${chips.length}` : ''}
-          </Copy>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Choose sort order"
-          onPress={() => setSheet('sort')}
-          style={[
-            s.row,
-            { flex: 1, minHeight: 44, gap: 5, justifyContent: 'center' },
-          ]}
-        >
-          <Copy numberOfLines={1} style={{ fontSize: 12 }}>
-            {sorts.find((sort) => sort.value === query.sort)?.label}
-          </Copy>
-          <Icon name="chevron-down" size={12} />
-        </Pressable>
-        <IconButton
-          icon={query.layout === 'list' ? 'grid-outline' : 'list-outline'}
-          label={query.layout === 'list' ? 'Show grid' : 'Show list'}
-          onPress={() =>
-            change({ layout: query.layout === 'list' ? 'grid' : 'list' })
-          }
+      {trashed && (
+        <TrashUndo
+          key={trashed.id}
+          item={trashed}
+          onClose={() => setTrashed(undefined)}
         />
-      </View>
-      {!!chips.length && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0 }}
-          contentContainerStyle={{ gap: 8 }}
-        >
-          {chips.map((chip) => (
+      )}
+      <FlatList
+        data={rows}
+        keyExtractor={(row) => `${row.kind}:${row.id}`}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
+        ListHeaderComponent={
+          <View style={{ gap: 12 }}>
+            {header}
+            {initialView !== 'trash' && (
+              <SegmentedChoice
+                value={query.view}
+                options={[
+                  { value: 'all', label: 'All Active' },
+                  {
+                    value: 'favorites',
+                    label: 'Starred',
+                    icon: 'star-outline',
+                  },
+                  {
+                    value: 'archived',
+                    label: 'Archived',
+                    icon: 'archive-outline',
+                  },
+                ]}
+                onChange={(view) =>
+                  change({ view: view as InventoryQuery['view'] })
+                }
+              />
+            )}
+            <View
+              ref={toolbar}
+              collapsable={false}
+              style={[s.row, { flexWrap: 'wrap' }]}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Filter items"
+                accessibilityState={{ expanded: !!anchor }}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  toolbar.current?.measureInWindow((x, y, _width, height) =>
+                    setAnchor({ x, y, height }),
+                  );
+                }}
+                style={{
+                  minHeight: 44,
+                  paddingHorizontal: 12,
+                  borderRadius: 12,
+                  backgroundColor: colors.soft,
+                  justifyContent: 'center',
+                }}
+              >
+                <Copy>Filters{chips.length ? ` · ${chips.length}` : ''}</Copy>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Choose sort order"
+                onPress={() => setSortOpen(true)}
+                style={{ minHeight: 44, justifyContent: 'center' }}
+              >
+                <Copy style={{ fontSize: 12 }}>
+                  {sorts.find((sort) => sort.value === query.sort)?.label} ▾
+                </Copy>
+              </Pressable>
+            </View>
+            <SegmentedChoice
+              value={query.layout}
+              options={[
+                { value: 'grid', label: 'Grid', icon: 'grid-outline' },
+                { value: 'list', label: 'List', icon: 'list-outline' },
+              ]}
+              onChange={(layout) =>
+                change({ layout: layout as InventoryQuery['layout'] })
+              }
+            />
+            <Copy muted style={{ fontSize: 12 }}>
+              View by
+            </Copy>
+            <ScrollView
+              horizontal
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{ gap: 8 }}
+            >
+              {groupChoices.map((choice) => (
+                <Pressable
+                  key={choice.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: groupBy === choice.value }}
+                  onPress={() => {
+                    setGroupBy(choice.value as GroupBy);
+                    setCollapsed({});
+                    run(
+                      repository.settings({
+                        inventoryGroupBy: choice.value as GroupBy,
+                      }),
+                    );
+                  }}
+                  style={{
+                    minHeight: 44,
+                    justifyContent: 'center',
+                    paddingHorizontal: 12,
+                    backgroundColor:
+                      groupBy === choice.value ? colors.soft : colors.surface,
+                    borderRadius: 12,
+                  }}
+                >
+                  <Copy>{choice.label}</Copy>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {!!chips.length && (
+              <ScrollView
+                horizontal
+                contentContainerStyle={{ gap: 8 }}
+                keyboardShouldPersistTaps="handled"
+              >
+                {chips.map((chip) => (
+                  <Pressable
+                    key={chip.label}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${chip.label} filter`}
+                    onPress={chip.clear}
+                    style={{
+                      minHeight: 44,
+                      justifyContent: 'center',
+                      paddingHorizontal: 10,
+                      borderRadius: 12,
+                      backgroundColor: colors.soft,
+                    }}
+                  >
+                    <Copy style={{ fontSize: 12 }}>{chip.label} ×</Copy>
+                  </Pressable>
+                ))}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={reset}
+                  style={{ minHeight: 44, justifyContent: 'center' }}
+                >
+                  <Copy>Reset</Copy>
+                </Pressable>
+              </ScrollView>
+            )}
+            <Copy muted style={{ fontSize: 12 }}>
+              {items.length} {items.length === 1 ? 'item' : 'items'}
+              {effective.placeId
+                ? ` · In ${placePath(effective.placeId, data.places)}${query.includeSubplaces ? ' including subplaces' : ' directly here'}`
+                : ''}
+              {effective.folderId
+                ? ` · ${effective.folderId === 'unfiled' ? 'Unfiled' : folderPath(effective.folderId, data.folders)}${effective.folderId !== 'unfiled' ? (query.includeSubfolders ? ' including subfolders' : ' directly here') : ''}`
+                : ''}
+            </Copy>
+            {(scopePlaceId || scopeFolderId) && (
+              <Button
+                secondary
+                title="Search everywhere"
+                onPress={() =>
+                  router.push({
+                    pathname: '/items',
+                    params: { query: query.text },
+                  })
+                }
+              />
+            )}
+            {groupBy !== 'items' && !!groups.length && (
+              <View style={s.row}>
+                {['Expand all', 'Collapse all'].map((title, index) => (
+                  <Pressable
+                    key={title}
+                    accessibilityRole="button"
+                    onPress={() =>
+                      setCollapsed(
+                        Object.fromEntries(
+                          groups.map((group) => [
+                            `${groupBy}:${group.id}`,
+                            index === 1,
+                          ]),
+                        ),
+                      )
+                    }
+                    style={{ minHeight: 44, justifyContent: 'center' }}
+                  >
+                    <Copy style={{ fontSize: 12 }}>{title}</Copy>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            {initialView === 'trash' && !!items.length && (
+              <Button
+                danger
+                title="Empty Trash"
+                onPress={() => {
+                  void confirm(
+                    'Empty Trash?',
+                    'Permanently delete every trashed item, its history, and photos no longer used elsewhere? This cannot be undone.',
+                  ).then((yes) => {
+                    if (yes) run(repository.emptyTrash());
+                  });
+                }}
+              />
+            )}
+            <ErrorMessage message={error} />
+          </View>
+        }
+        renderItem={({ item: row }) =>
+          row.kind === 'leading' ? (
+            row.render()
+          ) : row.kind === 'group' ? (
             <Pressable
-              key={chip.label}
               accessibilityRole="button"
-              accessibilityLabel={`Remove ${chip.label} filter`}
-              onPress={chip.clear}
+              accessibilityState={{
+                expanded: !collapsed[`${groupBy}:${row.id}`],
+              }}
+              onPress={() =>
+                setCollapsed((previous) => ({
+                  ...previous,
+                  [`${groupBy}:${row.id}`]: !previous[`${groupBy}:${row.id}`],
+                }))
+              }
               style={[
                 s.row,
                 {
-                  backgroundColor: colors.soft,
-                  paddingHorizontal: 10,
-                  minHeight: 44,
+                  minHeight: 52,
+                  paddingHorizontal: 12,
                   borderRadius: 12,
-                  gap: 6,
+                  backgroundColor: colors.soft,
                 },
               ]}
             >
-              <Copy style={{ fontSize: 12 }}>{chip.label}</Copy>
-              <Icon name="close" size={13} />
+              <Copy style={{ flex: 1, fontWeight: '700' }}>
+                {row.label} · {row.count}
+              </Copy>
+              <Icon
+                name={
+                  collapsed[`${groupBy}:${row.id}`]
+                    ? 'chevron-down'
+                    : 'chevron-up'
+                }
+                size={16}
+              />
             </Pressable>
-          ))}
-          <Pressable
-            accessibilityRole="button"
-            onPress={reset}
-            style={{ minHeight: 44, justifyContent: 'center' }}
-          >
-            <Copy style={{ fontSize: 12 }}>Reset</Copy>
-          </Pressable>
-        </ScrollView>
-      )}
-      <Copy muted style={{ fontSize: 12 }}>
-        {items.length} {items.length === 1 ? 'item' : 'items'} · {activeScope}
-        {effective.placeId ||
-        (effective.folderId && effective.folderId !== 'unfiled')
-          ? query.includeDescendants
-            ? ' · including children'
-            : ' · directly here'
-          : ''}
-      </Copy>
-      {(scopePlaceId || scopeFolderId) && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Search everywhere"
-          onPress={() =>
-            router.push({ pathname: '/items', params: { query: query.text } })
-          }
-          style={{ minHeight: 44, justifyContent: 'center' }}
-        >
-          <Copy style={{ fontSize: 13, color: colors.primary }}>
-            Search everywhere →
-          </Copy>
-        </Pressable>
-      )}
-      <FlatList
-        key={`${query.layout}:${columns}`}
-        style={{ flex: 1 }}
-        data={rows}
-        keyboardShouldPersistTaps="handled"
-        keyExtractor={(row) =>
-          row.kind === 'item' ? `item:${row.item.id}` : `leading:${row.id}`
+          ) : (
+            <Reveal>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {row.items.map((item) => (
+                  <ItemCard
+                    key={item.id}
+                    item={item}
+                    onTrash={setTrashed}
+                    list={query.layout === 'list'}
+                  />
+                ))}
+                {columns === 2 && row.items.length === 1 && (
+                  <View style={{ flex: 1 }} />
+                )}
+              </View>
+            </Reveal>
+          )
         }
-        numColumns={columns}
-        columnWrapperStyle={columns === 1 ? undefined : { gap: 12 }}
-        contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
-        ListHeaderComponent={
-          header ? (
-            <View style={{ gap: 12, marginBottom: 4 }}>{header}</View>
-          ) : undefined
-        }
-        renderItem={({ item }) => (
-          <View style={{ width: columns === 1 ? '100%' : '48%' }}>
-            {item.kind === 'leading' ? (
-              item.render()
-            ) : (
-              <ItemCard item={item.item} list={query.layout === 'list'} />
-            )}
-          </View>
-        )}
         ListEmptyComponent={
           <View style={{ gap: 12 }}>
             <Empty
               title={
-                query.text.trim() || chips.length
-                  ? 'No matching items here.'
-                  : 'Room for your belongings.'
+                initialView === 'trash'
+                  ? 'Trash is empty.'
+                  : 'No matching items here.'
               }
               message={
-                chips.length
-                  ? 'A filter may be hiding what you need. Try resetting filters or searching everywhere.'
+                initialView === 'trash'
+                  ? 'Deleted items stay here until you restore or permanently remove them.'
                   : (emptyMessage ??
-                    'Save an item with a name and a place. Organization is optional.')
+                    'Try resetting filters, or remember a new item. Organization is optional.')
               }
-              action="Remember an item"
-              onPress={onAdd ?? (() => router.push('/capture'))}
             />
             {!!chips.length && (
               <Button secondary title="Reset filters" onPress={reset} />
             )}
+            {initialView !== 'trash' && (
+              <Button
+                title="Remember an item"
+                onPress={onAdd ?? (() => router.push('/capture'))}
+              />
+            )}
           </View>
         }
-      />
-      <ChoiceSheet
-        visible={!!sheet}
-        title={
-          sheet === 'filters'
-            ? 'Filter items'
-            : sheet === 'sort'
-              ? 'Sort items'
-              : `Choose ${sheet ?? 'filter'}`
+        ListFooterComponent={
+          query.view !== 'archived' && query.view !== 'trash' ? (
+            <View style={{ marginTop: 20 }}>
+              <SurpriseButton items={items} />
+            </View>
+          ) : undefined
         }
-        options={options}
-        selected={selected}
-        searchable={sheet === 'place' || sheet === 'folder'}
-        closeOnSelect={sheet !== 'filters'}
-        onClose={() => setSheet(undefined)}
-        onSelect={(value) => {
-          if (sheet === 'filters') {
-            if (value === 'reset') {
-              reset();
-              setSheet(undefined);
-            } else if (value === 'descendants') {
-              change({ includeDescendants: !query.includeDescendants });
-              setSheet(undefined);
-            } else setSheet(value as Sheet);
-          } else if (sheet === 'view')
-            change({ view: value as InventoryQuery['view'] });
-          else if (sheet === 'sort')
-            change({ sort: value as InventoryQuery['sort'] });
-          else if (sheet === 'category')
-            change({
-              category: (value || undefined) as
-                Category | 'uncategorized' | undefined,
-            });
-          else if (sheet === 'place') change({ placeId: value || undefined });
-          else if (sheet === 'folder') change({ folderId: value || undefined });
-        }}
+      />
+      {anchor && (
+        <FilterPanel
+          anchor={anchor}
+          query={query}
+          scopePlaceId={scopePlaceId}
+          scopeFolderId={scopeFolderId}
+          change={change}
+          reset={reset}
+          onClose={() => setAnchor(undefined)}
+        />
+      )}
+      <ChoiceSheet
+        visible={sortOpen}
+        title="Sort items"
+        options={sorts}
+        selected={query.sort}
+        onSelect={(sort) => change({ sort: sort as InventoryQuery['sort'] })}
+        onClose={() => setSortOpen(false)}
       />
     </View>
   );

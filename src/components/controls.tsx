@@ -1,3 +1,4 @@
+import { useMotion } from '../hooks/useMotion';
 import { useState } from 'react';
 import {
   FlatList,
@@ -177,6 +178,7 @@ export function ChoiceSheet({
   onClose(): void;
   closeOnSelect?: boolean;
 }) {
+  const motion = useMotion();
   const { colors } = useTheme();
   const [query, setQuery] = useState('');
   const matches = options.filter((option) =>
@@ -188,7 +190,7 @@ export function ChoiceSheet({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType={motion ? 'slide' : 'none'}
       onRequestClose={onClose}
       onShow={() => setQuery('')}
     >

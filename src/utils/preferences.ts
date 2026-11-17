@@ -39,6 +39,13 @@ export function normalizeSettings(
   return {
     ...defaultSettings,
     ...settings,
+    inventoryGroupBy: ['items', 'folders', 'places', 'categories'].includes(
+      settings?.inventoryGroupBy ?? '',
+    )
+      ? settings!.inventoryGroupBy
+      : 'items',
+    reduceAnimations: settings?.reduceAnimations === true,
+    homeItemsView: settings?.homeItemsView === 'list' ? 'list' : 'grid',
     quickAccess: validShortcuts(settings?.quickAccess, data),
   };
 }

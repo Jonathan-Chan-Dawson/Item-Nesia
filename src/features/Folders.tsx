@@ -1,3 +1,5 @@
+import { validIcon } from '../utils/icons';
+import type { IconName } from '../components/ui';
 import { useState } from 'react';
 import { FlatList, View } from 'react-native';
 import { router } from 'expo-router';
@@ -47,7 +49,9 @@ export function Folders({
   const renderFolder = (child: (typeof data.folders)[number]) => {
     const count = data.items.filter(
       (item) =>
-        !item.isArchived && inFolder(item.folderId, child.id, data.folders),
+        !item.isArchived &&
+        !item.deletedAt &&
+        inFolder(item.folderId, child.id, data.folders),
     ).length;
     return (
       <View
@@ -62,7 +66,7 @@ export function Folders({
         <SelectionRow
           title={child.name}
           subtitle={`${count} ${count === 1 ? 'item' : 'items'} including subfolders`}
-          icon="folder-outline"
+          icon={validIcon(child.icon, 'folder-outline') as IconName}
           onPress={() =>
             router.push({ pathname: '/folders/[id]', params: { id: child.id } })
           }
@@ -102,7 +106,7 @@ export function Folders({
                   {
                     value: 'pin',
                     label: pinned ? 'Remove from Quick Access' : 'Pin to Home',
-                    icon: 'star-outline',
+                    icon: 'pin-outline',
                   },
                   {
                     value: 'delete',
@@ -157,7 +161,7 @@ export function Folders({
           ListHeaderComponent={
             <SelectionRow
               title="Unfiled"
-              subtitle={`${data.items.filter((item) => !item.isArchived && !item.folderId).length} items without a folder`}
+              subtitle={`${data.items.filter((item) => !item.isArchived && !item.deletedAt && !item.folderId).length} items without a folder`}
               icon="folder-open-outline"
               onPress={() => router.push('/folders/unfiled')}
             />
@@ -225,7 +229,10 @@ export function Folders({
         title={unfiled ? 'Remove from a folder' : 'Add an existing item'}
         searchable
         options={data.items
-          .filter((item) => !item.isArchived && item.folderId !== id)
+          .filter(
+            (item) =>
+              !item.isArchived && !item.deletedAt && item.folderId !== id,
+          )
           .map((item) => ({
             value: item.id,
             label: item.name,

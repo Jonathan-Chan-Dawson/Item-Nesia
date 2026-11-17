@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
-import { ItemForm } from '../../../features/ItemForm';
+import { MoveItem } from '../../../features/MoveItem';
 export default function Move() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  return <ItemForm id={id} move />;
+  return <MoveItem key={id} id={id} />;
 }

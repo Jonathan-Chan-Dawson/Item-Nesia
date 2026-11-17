@@ -10,11 +10,15 @@ import {
   Header,
   Screen,
 } from '../components/ui';
+import { IconPicker } from '../components/IconPicker';
+import { PlaceSuggestions } from '../components/PlaceSuggestions';
+import { placeIcon } from '../components/PlaceCard';
 import { PlacePicker } from '../components/PlacePicker';
 
 export function PlaceForm({ id }: { id?: string }) {
   const { data, repository } = useMemory();
   const place = data.places.find((p) => p.id === id);
+  const [icon, setIcon] = useState(place?.icon ?? '');
   const [name, setName] = useState(place?.name ?? '');
   const [parent, setParent] = useState(place?.parentId);
   const [busy, setBusy] = useState(false);
@@ -39,6 +43,12 @@ export function PlaceForm({ id }: { id?: string }) {
         value={name}
         onChangeText={setName}
       />
+      {!id && <PlaceSuggestions onSelect={setName} />}
+      <IconPicker
+        value={icon}
+        onChange={setIcon}
+        suggestion={placeIcon(name)}
+      />
       <Copy title>Inside another place?</Copy>
       <PlacePicker value={parent} onChange={setParent} exclude={id} />
       <ErrorMessage message={error} />
@@ -51,7 +61,7 @@ export function PlaceForm({ id }: { id?: string }) {
           setBusy(true);
           setError(undefined);
           void repository
-            .savePlace(name, parent, id)
+            .savePlace(name, parent, id, icon)
             .then((saved) =>
               router.replace({
                 pathname: '/places/[id]',

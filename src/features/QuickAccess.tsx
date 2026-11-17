@@ -13,6 +13,8 @@ import {
   Screen,
   s,
 } from '../components/ui';
+import { validIcon } from '../utils/icons';
+import type { IconName } from '../components/ui';
 import { folderPath } from '../utils/folders';
 import { placePath } from '../utils/memory';
 import type { QuickAccessRef } from '../types/models';
@@ -102,13 +104,13 @@ export function QuickAccess() {
             value: `place:${p.id}`,
             label: placePath(p.id, data.places),
             detail: 'Place',
-            icon: 'location-outline' as const,
+            icon: validIcon(p.icon, 'location-outline') as IconName,
           })),
           ...data.folders.map((f) => ({
             value: `folder:${f.id}`,
             label: folderPath(f.id, data.folders),
             detail: 'Folder',
-            icon: 'folder-outline' as const,
+            icon: validIcon(f.icon, 'folder-outline') as IconName,
           })),
         ].filter(
           (option) =>

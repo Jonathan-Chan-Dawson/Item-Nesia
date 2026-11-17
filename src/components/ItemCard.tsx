@@ -1,3 +1,6 @@
+import { StarButton } from './StarButton';
+import { ItemCardActions } from './ItemCardActions';
+import { validIcon } from '../utils/icons';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -59,8 +62,57 @@ const categoryArt: Record<
     ink: '#826893',
     dark: '#362C3E',
   },
+  'Personal Care': {
+    icon: 'cut-outline',
+    light: '#E0ECEA',
+    ink: '#4F7F75',
+    dark: '#273D37',
+  },
+  'Health & Wellness': {
+    icon: 'medkit-outline',
+    light: '#E0ECEA',
+    ink: '#4F7F75',
+    dark: '#273D37',
+  },
+  'Sports & Outdoors': {
+    icon: 'bicycle-outline',
+    light: '#E0ECEA',
+    ink: '#4F7F75',
+    dark: '#273D37',
+  },
+  Stationery: {
+    icon: 'pencil-outline',
+    light: '#E0ECEA',
+    ink: '#4F7F75',
+    dark: '#273D37',
+  },
+  'Pet Supplies': {
+    icon: 'paw-outline',
+    light: '#E0ECEA',
+    ink: '#4F7F75',
+    dark: '#273D37',
+  },
+  'Cleaning & Laundry': {
+    icon: 'water-outline',
+    light: '#E0ECEA',
+    ink: '#4F7F75',
+    dark: '#273D37',
+  },
+  Seasonal: {
+    icon: 'gift-outline',
+    light: '#E0ECEA',
+    ink: '#4F7F75',
+    dark: '#273D37',
+  },
+  Other: {
+    icon: 'cube-outline',
+    light: '#E0ECEA',
+    ink: '#4F7F75',
+    dark: '#273D37',
+  },
 };
-function itemIcon(item: Item): IconName {
+export function itemIcon(item: Item): IconName {
+  if (item.icon) return validIcon(item.icon) as IconName;
   if (/cable/i.test(item.name)) return 'git-merge-outline';
   if (/battery|charger/i.test(item.name)) return 'battery-charging-outline';
   if (/keys/i.test(item.name)) return 'key-outline';
@@ -150,85 +202,104 @@ export function ItemPhoto({
     </View>
   );
 }
-export function ItemCard({ item, list }: { item: Item; list?: boolean }) {
+export function ItemCard({
+  item,
+  list,
+  onTrash,
+}: {
+  item: Item;
+  list?: boolean;
+  onTrash?(item: Item): void;
+}) {
   const { data } = useMemory();
   const { colors } = useTheme();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${item.name}`}
-      onPress={() =>
-        router.push({ pathname: '/items/[id]', params: { id: item.id } })
-      }
-      style={({ pressed }) => ({
-        flex: 1,
-        backgroundColor: colors.surface,
-        padding: 7,
-        borderRadius: 21,
-        borderWidth: 1,
-        borderColor: colors.border,
-        opacity: pressed ? 0.75 : 1,
-        transform: [{ scale: pressed ? 0.98 : 1 }],
-        flexDirection: list ? 'row' : 'column',
-        gap: list ? 12 : 0,
-        boxShadow: `0px 3px 12px ${colors.shadow}`,
-      })}
-    >
-      <View style={list ? { width: 72 } : undefined}>
-        <ItemPhoto item={item} height={list ? 76 : 142} />
-        {!list && item.isFavorite && (
-          <View
-            style={{
-              position: 'absolute',
-              right: 8,
-              top: 8,
-              borderRadius: 12,
-              padding: 5,
-              backgroundColor: colors.surface,
-            }}
-          >
-            <Icon name="heart" size={12} />
-          </View>
-        )}
-      </View>
-      <View
-        style={{
+    <View style={{ flex: 1 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${item.name}`}
+        onPress={() =>
+          router.push({ pathname: '/items/[id]', params: { id: item.id } })
+        }
+        style={({ pressed }) => ({
           flex: 1,
-          gap: 5,
-          paddingHorizontal: list ? 0 : 5,
-          paddingVertical: list ? 9 : 12,
-          justifyContent: 'center',
-        }}
+          backgroundColor: colors.surface,
+          padding: 7,
+          paddingRight: list ? 52 : 7,
+          borderRadius: 21,
+          borderWidth: 1,
+          borderColor: colors.border,
+          opacity: pressed ? 0.75 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+          flexDirection: list ? 'row' : 'column',
+          gap: list ? 12 : 0,
+          boxShadow: `0px 3px 12px ${colors.shadow}`,
+        })}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-          <Copy
-            numberOfLines={2}
-            style={{ fontWeight: '700', fontSize: 14, lineHeight: 19, flex: 1 }}
-          >
-            {item.name}
-          </Copy>
-          {list && item.isFavorite && <Icon name="heart" size={13} />}
+        <View style={list ? { width: 72 } : undefined}>
+          <ItemPhoto item={item} height={list ? 76 : 142} />
         </View>
         <View
-          style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}
+          style={{
+            flex: 1,
+            gap: 5,
+            paddingHorizontal: list ? 0 : 5,
+            paddingVertical: list ? 9 : 12,
+            justifyContent: 'center',
+          }}
         >
-          <View style={{ marginTop: 2 }}>
-            <Icon name="location-outline" size={11} color={colors.secondary} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <Copy
+              numberOfLines={2}
+              style={{
+                fontWeight: '700',
+                fontSize: 14,
+                lineHeight: 19,
+                flex: 1,
+              }}
+            >
+              {item.name}
+            </Copy>
           </View>
-          <Copy
-            muted
-            numberOfLines={2}
-            style={{ fontSize: 11, lineHeight: 16, flex: 1 }}
+          <View
+            style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}
           >
-            {locationLabel(item, data.places)}
-          </Copy>
+            <View style={{ marginTop: 2 }}>
+              <Icon
+                name="location-outline"
+                size={11}
+                color={colors.secondary}
+              />
+            </View>
+            <Copy
+              muted
+              numberOfLines={2}
+              style={{ fontSize: 11, lineHeight: 16, flex: 1 }}
+            >
+              {locationLabel(item, data.places)}
+            </Copy>
+          </View>
         </View>
+        {list && (
+          <View style={{ justifyContent: 'center', paddingRight: 6 }}>
+            <Icon name="chevron-forward" size={15} color={colors.secondary} />
+          </View>
+        )}
+      </Pressable>
+      <View
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          flexDirection: list ? 'column' : 'row',
+          backgroundColor: colors.surface,
+          borderRadius: 12,
+        }}
+      >
+        {list && <StarButton item={item} />}
+        <ItemCardActions item={item} onTrash={onTrash} />
+        {!list && <StarButton item={item} />}
       </View>
-      {list && (
-        <View style={{ justifyContent: 'center', paddingRight: 6 }}>
-          <Icon name="chevron-forward" size={15} color={colors.secondary} />
-        </View>
-      )}
-    </Pressable>
+    </View>
   );
 }

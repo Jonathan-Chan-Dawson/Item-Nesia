@@ -13,6 +13,7 @@ import {
 import { useMemory, useTheme } from '../hooks/useMemory';
 import type { Settings } from '../types/models';
 import { SegmentedChoice, SelectionRow } from '../components/controls';
+import { OrganizeSamples } from '../components/OrganizeSamples';
 import { BackupControls } from '../features/BackupControls';
 import { router } from 'expo-router';
 
@@ -75,7 +76,7 @@ export default function SettingsScreen() {
         <SelectionRow
           title="Quick Access"
           subtitle="Choose and reorder up to four Home shortcuts."
-          icon="star-outline"
+          icon="pin-outline"
           onPress={() => router.push('/quick-access')}
         />
       </Panel>
@@ -110,7 +111,23 @@ export default function SettingsScreen() {
           }
         />
       </Panel>
+      <Panel>
+        <View style={s.row}>
+          <View style={{ flex: 1 }}>
+            <Copy>Reduce animations</Copy>
+            <Copy muted style={{ fontSize: 12 }}>
+              System reduced motion is always respected.
+            </Copy>
+          </View>
+          <Switch
+            accessibilityLabel="Reduce animations"
+            value={!!data.settings.reduceAnimations}
+            onValueChange={(reduceAnimations) => update({ reduceAnimations })}
+          />
+        </View>
+      </Panel>
       <Section title="Your data" />
+      <OrganizeSamples />
       <BackupControls />
       <Copy muted style={{ fontSize: 13, lineHeight: 20 }}>
         {Platform.OS === 'web'

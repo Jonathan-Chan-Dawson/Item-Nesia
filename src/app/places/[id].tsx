@@ -38,7 +38,7 @@ export default function PlaceDetails() {
               {
                 value: 'pin',
                 label: pinned ? 'Remove from Quick Access' : 'Pin to Home',
-                icon: 'star-outline',
+                icon: 'pin-outline',
               },
             ]}
             onSelect={(value) => {

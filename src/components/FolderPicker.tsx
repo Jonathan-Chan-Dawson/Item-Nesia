@@ -1,3 +1,5 @@
+import { validIcon } from '../utils/icons';
+import type { IconName } from '../components/ui';
 import { useState } from 'react';
 import { useMemory } from '../hooks/useMemory';
 import { ChoiceSheet, SelectionRow } from './controls';
@@ -25,7 +27,12 @@ export function FolderPicker({
       <SelectionRow
         title={label}
         subtitle={folderPath(value, data.folders) || 'Unfiled'}
-        icon="folder-outline"
+        icon={
+          validIcon(
+            data.folders.find((f) => f.id === value)?.icon,
+            'folder-outline',
+          ) as IconName
+        }
         onPress={() => setOpen(true)}
       />
       {label === 'Folder' && (
@@ -74,7 +81,7 @@ export function FolderPicker({
             .map((f) => ({
               value: f.id,
               label: folderPath(f.id, data.folders),
-              icon: 'folder-outline' as const,
+              icon: validIcon(f.icon, 'folder-outline') as IconName,
             })),
         ]}
         onSelect={(id) => onChange(id || undefined)}

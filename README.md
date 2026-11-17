@@ -32,7 +32,7 @@ No environment variables or API keys are required. Development dependency downlo
 
 ## What works
 
-- Search-first Home, a three-destination menu (All Items, Places, Folders), a separate Settings button, and stack navigation.
+- Search-first Home, a utility menu (Starred, Archive, Trash, Backups, Help), a separate Settings button, and stack navigation.
 - Up to four optional, ordered Quick Access shortcuts to any place or folder. Pin from its menu or manage shortcuts in Settings; broken and duplicate shortcuts are removed automatically.
 - Real empty state with a short dismissible introduction; sample data is loaded only through an explicit action.
 - Remember an item with a name, place and/or exact spot, optional item photo, and separate location photo. Optional category, description, aliases, and tags are collapsed initially.
@@ -44,7 +44,7 @@ No environment variables or API keys are required. Development dependency downlo
 - Contents-first nested folders with a separate Unfiled view, searchable add-existing-item flow, inline creation, and safe rename/reparent/delete actions. Folder views start with direct items; place views include descendants by default. Both offer a visible Search everywhere action.
 - Create, browse, rename, and reparent nested places; create a place inline while editing an item; reject circular hierarchies.
 - Persisted system/light/dark appearance, haptics setting, default inventory view, metadata export, additive demo restoration, and confirmed data clearing.
-- Fifteen labeled demo items with category icons. Samples never overwrite existing records, including edited samples.
+- Sixty labeled demo items with category icons. Samples never overwrite existing records, including edited samples. Home offers Add sample items to fill an older demo with the new cooking, grooming, car, travel, and hobby examples. Home layout is saved independently of the inventory layout and included in full backups.
 
 ## Project structure
 
@@ -63,11 +63,11 @@ src/
 tests/             Focused domain and persistence-contract tests
 ```
 
-Routes include home, search, capture, inventory, item details/edit/move, places/details/new/edit, folders/details/unfiled, Quick Access, favorites, archive, settings, and about. Favorites and archive remain compatible routes; the main interface exposes them through All Items filters. Non-route code stays outside `src/app`.
+Routes include home, search, capture, inventory, item details/edit/move, places/details/new/edit, folders/details/unfiled, Quick Access, favorites, archive, Trash, Backups, settings, and about. Favorites and archive remain compatible routes; the main interface exposes Starred and Archived through visible choices and the utility menu. Non-route code stays outside `src/app`.
 
 ## UI refinements
 
-The shared UI uses compact search/filter/sort controls, searchable choice sheets, segmented appearance/view preferences, category-tinted item artwork, and contextual overflow menus. Home shows an optional Quick Access grid, four recently added or physically moved items, and a small Browse row that scrolls with the page. Editing a name, favorite, category, or folder does not change Home recency or location history. Small windows and larger accessibility text switch grids to one column; narrow Home headers simplify the branding to preserve both action buttons. Place counts include nested locations; item details retain the exact recorded location and use a compact history timeline.
+The shared UI uses compact search/filter/sort controls, searchable choice sheets, segmented appearance/view preferences, category-tinted item artwork, and contextual overflow menus. Home shows an optional Quick Access grid, eight recently added or physically moved items with a saved Grid/List choice, and a Browse row directly below the save button. Editing a name, favorite, category, or folder does not change Home recency or location history. Small windows and larger accessibility text switch grids to one column; narrow Home headers simplify the branding to preserve both action buttons. Place counts include nested locations; item details retain the exact recorded location and use a compact history timeline.
 
 The organization model has four distinct concepts: an **item** is the belonging, a **place** records where it is physically stored, a **folder** is a personal group, and an optional **category** describes its type. A camping spatula can belong to Camping, have the Kitchen & Dining category, and be physically stored in Garage → Camping box. Kitchen can be an ordinary pinned place. Haircut logs, parked-car tools, recipes, and other specialized workflows remain future modules; this release keeps the shared belongings inventory focused.
 
@@ -79,7 +79,7 @@ Native photos are copied from picker/cache URIs to the persistent app document d
 
 **Browser:** A separate adapter uses a versioned `localStorage` key and stores selected photos as data URLs. Writes are atomic at the snapshot level; quota errors leave the current app state intact and surface an error. This is a limited preview, not native-equivalent persistence: clearing browser data removes memories, large photos can exhaust quota, and multiple tabs do not coordinate edits. Use one preview tab at a time. Private-browser restrictions may prevent storage.
 
-Metadata export remains a lightweight JSON option without photo bytes. For complete backups, use Settings → Create full backup. This writes a version 2 ZIP containing items, folders, places, settings (including ordered Quick Access shortcuts), location history, and every referenced photo; a missing photo aborts export rather than producing an incomplete backup. The reader accepts both version 1 and version 2 backups. Older stored settings and backups gain empty Quick Access without losing existing records. Native uses the system file share sheet; browser downloads the ZIP. Keep the resulting file somewhere safe; it is not encrypted and no cloud service is used.
+Metadata export remains a lightweight JSON option without photo bytes. For complete backups, use Settings → Create full backup. This writes a version 4 ZIP containing items, folders, places, settings (including ordered Quick Access shortcuts), location history, and every referenced photo; a missing photo aborts export rather than producing an incomplete backup. The reader accepts version 1, version 2, version 3, and version 4 backups. Older stored settings and backups gain empty Quick Access without losing existing records. Native uses the system file share sheet; browser downloads the ZIP. Keep the resulting file somewhere safe; it is not encrypted and no cloud service is used.
 
 Settings → Restore full backup validates the archive, sizes, references, hierarchy, pins, and record shapes before showing counts and asking for confirmation. Restore replaces the current collection; merging backups is not supported. New photo files are staged before the transactional metadata replacement. Failed commits preserve current data and clean up staged photos where possible. Browser storage quotas still apply and may reject a large native backup without changing the existing collection.
 
@@ -111,7 +111,7 @@ This delivers a functional first slice, not every feature of the complete demo b
 1. Native device QA for camera permission denial, image persistence after process restart, keyboard behavior, back gestures, small screens, and both themes.
 2. Pin dragging and image zoom beyond the current enlarge view; real-device EXIF/orientation checks.
 3. Place covers/descriptions and safe place deletion with explicit reassignment.
-4. A dedicated short onboarding flow, query restoration after process termination, independent descendant controls when combining place and folder filters, and further empty/error polish.
+4. A dedicated short onboarding flow, query restoration after process termination and further empty/error polish.
 5. SQLite engine integration tests, web storage quota tests, runtime schema validation, crash orphan cleanup, and incremental indexed database writes.
 
 No physical iOS or Android device testing is claimed. Original starter app icons remain in place pending branding work.
@@ -119,10 +119,36 @@ No physical iOS or Android device testing is claimed. Original starter app icons
 ## Validation performed
 
 - TypeScript and Expo lint passed.
-- Twenty-four focused automated tests passed, including the organization, shortcuts, query, duplication, and backup compatibility checks above, plus full backup/photo round trips (including a 393 KB browser data URL), invalid archives, and failed restores.
+- Fifty-one focused automated tests passed, including the organization, shortcuts, query, duplication, and backup compatibility checks above, plus full backup/photo round trips (including a 393 KB browser data URL), invalid archives, and failed restores.
 - Expo SDK dependency check passed using the installed SDK dependency map (the online versions endpoint was unavailable).
 - Production JavaScript exports passed for web, Android, and iOS. Native export is a bundling check, not a signed binary or device run.
 - Earlier browser walkthroughs exercised save → move → reload → search → history, nested folder creation, saving a photo and pin, enlarged photo display, backup download, and repeat-save retention at 390 × 844.
 - The current organization redesign has passed automated checks and export checks. Its visual browser walkthrough remains pending because browser automation was unavailable in this session. Physical-device camera, native SQLite, picker permissions, native back gestures, offline cold start, sharing/picking, and destructive restore through the UI still require device QA.
 
 API choices were checked against the [Expo SDK 58 documentation](https://docs.expo.dev/versions/v58.0.0/) and [SDK 58 screen-removal guidance](https://docs.expo.dev/router/advanced/prevent-screen-removal/).
+
+## Discovery and organization release
+
+- All Items now supports expandable folders, places, and category sections, with accurate filtered counts and Grid/List views. Each item appears once in its direct group. Place and folder descendant controls are independent. Query state and expanded sections survive detail navigation; grouping preference survives restart.
+- Filters open in an anchored panel with category, place, and folder choices together, searchable options, removable chips, and Reset. The controls scroll with results to remain usable on small screens and with large text.
+- The demo contains 60 items across 16 categories, with at least two examples per category. Fresh demos file 54 samples into eight folders. Existing samples can be organized explicitly from Home or Settings; assigned folders and personal records are preserved. Samples in Trash are never resurrected by demo restoration.
+- Place suggestions fill an editable name and create nothing until saved. Rooms describe locations; categories describe item types; folders are personal groups.
+- A searchable, grouped picker offers all 1,357 installed Ionicons, with common suggestions first. Items, folders, and places support custom icons; photos remain primary item artwork. Unknown icon identifiers fall back safely.
+- Cards and item details keep a visible star control using the existing favorite records. Cards pair it with a compact top-right actions menu offering Edit, Archive/restore, and Move to Trash; card deletion shows Undo in the parent list. Quick Access uses pin icons. Stars do not change saved physical locations or history.
+- Surprise me sits at the scrolling bottom of Home and active inventory views. Home uses all active items; inventory uses its current filtered results, including collapsed groups. Archive and Trash are excluded, empty pools are disabled, and immediate repeats are avoided where possible.
+- Trash is recoverable and has no automatic expiry. Normal deletion moves to Trash with an Undo/restore action. Restore preserves the previous archived state. Permanent deletion and Empty Trash require confirmation; shared photo references are retained until the final record is removed.
+- Full backup format 4 preserves custom icons, Trash, grouping, and reduced-animation preferences. Readers still accept formats 1, 2, and 3. Native SQLite keeps its existing JSON entity tables.
+- Star feedback, section reveals, and save confirmation use brief native-driven animation, with system reduced motion and the Reduce animations setting respected. Profiles remain deferred.
+- Automated coverage includes organized-demo upgrades, Trash persistence and failed writes, blocked edits, final-photo cleanup, grouping, independent descendant filters, scoped random selection, every installed icon, and backup formats 1–3. Current visual and physical-device walkthroughs remain pending because browser automation was unavailable.
+
+Home prioritizes a compact Starred section when active starred items exist. It shows at most two rows (four items normally, two on narrow or large-text layouts), with View all opening Starred. Those displayed items are excluded from the recent section; it is hidden when no other active items remain.
+
+## Compact location editing and history
+
+Move now uses a compact From summary and one destination card with Place, Position, and an optional collapsed photo row. Suggested destinations and past-position chips use local records, with hidden scroll indicators and place icons. Copy item location fills the whole destination for review. The keyboard-aware Save action stays below the scrolling editor; choosing a suggestion and saving is two taps from the Move screen. Capture and edit reuse the compact location controls. Place creation is inside the searchable place picker.
+
+Changing a place clears its old position, photo, and pin; explicitly selecting a complete destination or copying an item fills those fields together. Position whitespace is normalized. The repository rejects stale location saves, preserves concurrent metadata edits, and adds no history for unchanged destinations. A successful move returns to details with Undo; Undo restores the prior location and location timestamp and removes only that move, provided no newer move or history deletion invalidated it.
+
+Details use a compact icon/location summary and optional photo thumbnail. Location history initially shows three entries, with View all and expandable From/To evidence. Delete entry and Clear history ask for confirmation, leave the current item and its timestamps unchanged, and release only photos with no remaining current or historical references. New history entries retain captured paths, positions, photos, pins, and the prior location timestamp. Legacy entries remain readable as text.
+
+Backup format 4 collects and remaps historical photographs, with snapshot validation; formats 1–3 remain readable. No SQLite table change is needed. Eleven added domain tests cover place changes, snapshots, stale/concurrent moves, no-op validation, Undo, deletion, failed writes, shared history assets, suggestions, and backup compatibility. Visual/browser and physical-device checks remain pending because the preview inspection tool was unavailable.

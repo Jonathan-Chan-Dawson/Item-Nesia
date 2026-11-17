@@ -28,6 +28,10 @@ export function photoReferences(data: MemoryData) {
       [
         ...data.items.flatMap((i) => [i.photoUri, i.locationPhotoUri]),
         ...data.places.map((p) => p.coverPhotoUri),
+        ...data.history.flatMap((entry) => [
+          entry.previousLocation?.photoUri,
+          entry.newLocation?.photoUri,
+        ]),
       ].filter((uri): uri is string => !!uri),
     ),
   ];
@@ -45,6 +49,10 @@ export function remapPhotos(
   for (const place of copy.places)
     if (place.coverPhotoUri)
       place.coverPhotoUri = map.get(place.coverPhotoUri) ?? fail();
+  for (const entry of copy.history)
+    for (const snapshot of [entry.previousLocation, entry.newLocation])
+      if (snapshot?.photoUri)
+        snapshot.photoUri = map.get(snapshot.photoUri) ?? fail();
   return copy;
 }
 export function validateBackupData(raw: unknown): MemoryData {
@@ -77,6 +85,7 @@ export function validateBackupData(raw: unknown): MemoryData {
       !string(folder.name) ||
       !folder.name.trim() ||
       !optional(folder.parentId) ||
+      !optional(folder.icon) ||
       !date(folder.createdAt) ||
       !date(folder.updatedAt)
     )
@@ -121,6 +130,8 @@ export function validateBackupData(raw: unknown): MemoryData {
         item.folderId,
         item.exactSpot,
       ].every(optional) ||
+      !optional(item.icon) ||
+      (item.deletedAt !== undefined && !date(item.deletedAt)) ||
       !photoUri(item.photoUri) ||
       !photoUri(item.locationPhotoUri)
     )
@@ -140,10 +151,32 @@ export function validateBackupData(raw: unknown): MemoryData {
     )
       return fail();
   }
+  const validSnapshot = (value: unknown) => {
+    if (value === undefined) return true;
+    if (!value || typeof value !== 'object') return false;
+    const snapshot = value as import('../types/models').LocationSnapshot;
+    const pins = [snapshot.pinX, snapshot.pinY];
+    return (
+      string(snapshot.path) &&
+      optional(snapshot.placeId) &&
+      optional(snapshot.position) &&
+      photoUri(snapshot.photoUri) &&
+      (!pins.some((v) => v !== undefined) ||
+        (!!snapshot.photoUri &&
+          pins.every(
+            (v) =>
+              typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1,
+          )))
+    );
+  };
   for (const entry of data.history)
     if (
       !data.items.some((i) => i.id === entry.itemId) ||
       !date(entry.changedAt) ||
+      !validSnapshot(entry.previousLocation) ||
+      !validSnapshot(entry.newLocation) ||
+      (entry.previousLocationUpdatedAt !== undefined &&
+        !date(entry.previousLocationUpdatedAt)) ||
       ![
         entry.itemId,
         entry.previousPlaceId,
@@ -205,7 +238,7 @@ export async function createBackup(
   }
   const manifest = JSON.stringify({
     format: 'item-nesia-backup',
-    version: 2,
+    version: 4,
     createdAt: new Date().toISOString(),
     data: remapPhotos(data, map),
     photos,
@@ -279,7 +312,7 @@ export async function readBackup(bytes: Uint8Array) {
   const manifest = JSON.parse(text);
   if (
     manifest.format !== 'item-nesia-backup' ||
-    ![1, 2].includes(manifest.version) ||
+    ![1, 2, 3, 4].includes(manifest.version) ||
     !Array.isArray(manifest.photos)
   )
     return fail();

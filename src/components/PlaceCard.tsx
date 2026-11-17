@@ -1,3 +1,4 @@
+import { validIcon } from '../utils/icons';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { useMemory, useTheme } from '../hooks/useMemory';
@@ -13,6 +14,9 @@ export function placeIcon(name: string): IconName {
   if (/car/.test(normalized)) return 'car-outline';
   if (/office|desk/.test(normalized)) return 'desktop-outline';
   if (/garage/.test(normalized)) return 'build-outline';
+  if (/bath|laundry/.test(normalized)) return 'water-outline';
+  if (/outdoor|garden/.test(normalized)) return 'leaf-outline';
+  if (/attic|storage|box/.test(normalized)) return 'cube-outline';
   if (/living/.test(normalized)) return 'home-outline';
   return 'file-tray-outline';
 }
@@ -27,7 +31,9 @@ export function PlaceCard({
   const { colors } = useTheme();
   const count = data.items.filter(
     (item) =>
-      !item.isArchived && containsPlace(item.placeId, place.id, data.places),
+      !item.isArchived &&
+      !item.deletedAt &&
+      containsPlace(item.placeId, place.id, data.places),
   ).length;
   return (
     <Pressable
@@ -64,7 +70,10 @@ export function PlaceCard({
             justifyContent: 'center',
           }}
         >
-          <Icon name={placeIcon(place.name)} size={23} />
+          <Icon
+            name={validIcon(place.icon, placeIcon(place.name)) as IconName}
+            size={23}
+          />
         </View>
         {!compact && (
           <View style={{ flex: 1 }}>

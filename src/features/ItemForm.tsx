@@ -1,3 +1,5 @@
+import { LocationEditor } from '../components/LocationEditor';
+import { locationSnapshot, locationDraft } from '../utils/locations';
 import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { router, usePreventRemove } from 'expo-router';
@@ -11,16 +13,16 @@ import {
   Field,
   Header,
   Screen,
-  Section,
 } from '../components/ui';
+import { IconPicker } from '../components/IconPicker';
+import { itemIcon } from '../components/ItemCard';
+import { Reveal } from '../components/Reveal';
 import { PhotoPicker } from '../components/PhotoPicker';
-import { PlacePicker } from '../components/PlacePicker';
 import { useMemory, useTheme } from '../hooks/useMemory';
 import { categories, type ItemDraft } from '../types/models';
 import { persistPhoto, removePhoto } from '../services/photos';
 import { placePath } from '../utils/memory';
 import { FolderPicker } from '../components/FolderPicker';
-import { LocationPhoto } from '../components/LocationPhoto';
 
 export function ItemForm({
   id,
@@ -40,6 +42,7 @@ export function ItemForm({
     item
       ? {
           name: item.name,
+          icon: item.icon,
           description: item.description,
           category: item.category,
           aliases: item.aliases,
@@ -113,7 +116,7 @@ export function ItemForm({
       setBusy(false);
     }
   }
-  if (id && !item)
+  if (id && (!item || item.deletedAt))
     return (
       <Screen>
         <Header title="Item unavailable" />
@@ -127,14 +130,16 @@ export function ItemForm({
     return (
       <Screen>
         <Header title={move ? 'Location updated' : 'Item saved'} />
-        <Empty
-          title={move ? 'New location recorded.' : 'Future you says thanks.'}
-          message={
-            move
-              ? `Last saved location: ${[placePath(draft.placeId, data.places), draft.exactSpot].filter(Boolean).join(' · ')}`
-              : 'Your item and its last saved location are safely recorded.'
-          }
-        />
+        <Reveal>
+          <Empty
+            title={move ? 'New location recorded.' : 'Future you says thanks.'}
+            message={
+              move
+                ? `Last saved location: ${[placePath(draft.placeId, data.places), draft.exactSpot].filter(Boolean).join(' · ')}`
+                : 'Your item and its last saved location are safely recorded.'
+            }
+          />
+        </Reveal>
         <Button
           title="View Item"
           onPress={() =>
@@ -204,64 +209,12 @@ export function ItemForm({
             />
           </>
         )}
-        <Section title="Where it is" />
-        {!id && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {[
-              ...new Set(
-                data.items
-                  .filter((i) => !i.isArchived && i.placeId)
-                  .sort((a, b) =>
-                    b.locationUpdatedAt.localeCompare(a.locationUpdatedAt),
-                  )
-                  .map((i) => i.placeId!),
-              ),
-            ]
-              .slice(0, 3)
-              .map((placeId) => (
-                <Button
-                  key={placeId}
-                  secondary
-                  title={placePath(placeId, data.places) || 'Place'}
-                  onPress={() => change({ placeId })}
-                />
-              ))}
-          </View>
-        )}
-        <PlacePicker
-          value={draft.placeId}
-          onChange={(placeId) => change({ placeId })}
+        <LocationEditor
+          value={locationSnapshot(draft, data.places)}
+          onChange={(destination) => change(locationDraft(destination))}
+          item={item}
+          shortcuts={!id}
         />
-        <Field
-          label="Exact spot"
-          placeholder="Top drawer, behind the shirts"
-          value={draft.exactSpot ?? ''}
-          onChangeText={(exactSpot) => change({ exactSpot })}
-          multiline
-        />
-        <PhotoPicker
-          label="Photo of the hiding spot · optional"
-          uri={draft.locationPhotoUri}
-          onChange={(locationPhotoUri) =>
-            change({
-              locationPhotoUri,
-              locationPinX: undefined,
-              locationPinY: undefined,
-            })
-          }
-        >
-          {draft.locationPhotoUri && (
-            <LocationPhoto
-              key={draft.locationPhotoUri}
-              uri={draft.locationPhotoUri}
-              x={draft.locationPinX}
-              y={draft.locationPinY}
-              onChange={(point) =>
-                change({ locationPinX: point?.x, locationPinY: point?.y })
-              }
-            />
-          )}
-        </PhotoPicker>
         {!move && (
           <>
             <Button
@@ -277,6 +230,13 @@ export function ItemForm({
                   value={draft.description ?? ''}
                   onChangeText={(description) => change({ description })}
                   multiline
+                />
+                <IconPicker
+                  value={draft.icon}
+                  suggestion={itemIcon({
+                    ...draft,
+                  } as import('../types/models').Item)}
+                  onChange={(icon) => change({ icon })}
                 />
                 <FolderPicker
                   value={draft.folderId}

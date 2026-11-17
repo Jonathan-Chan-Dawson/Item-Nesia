@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { MemoryRepository } = require('../.test-build/repositories/memory');
 const { emptyData } = require('../.test-build/types/models');
+const { DEMO_ITEM_COUNT } = require('../.test-build/database/demo');
 const {
   placePath,
   searchItems,
@@ -76,7 +77,7 @@ test('fresh initialization stays empty; demo restoration is additive and idempot
   );
   await env.repo.seedDemo();
   await env.repo.seedDemo();
-  assert.equal(env.current().items.length, 16);
+  assert.equal(env.current().items.length, DEMO_ITEM_COUNT + 1);
   assert.ok(env.current().items.find((i) => i.id === id));
   assert.equal(env.current().settings.demoInitialized, true);
   assert.equal(
@@ -84,6 +85,55 @@ test('fresh initialization stays empty; demo restoration is additive and idempot
     1,
   );
 });
+test('expanded samples fill an older demo without replacing edited or real items', async () => {
+  const env = setup();
+  await env.repo.initialize();
+  await env.repo.seedDemo();
+  const legacy = await env.repo.snapshot();
+  legacy.items = legacy.items.filter((item) => Number(item.id.slice(10)) < 15);
+  legacy.items[0].name = 'My edited wallet';
+  legacy.items[0].isArchived = true;
+  const repo = new MemoryRepository(
+    { load: async () => legacy, save: async () => {} },
+    () => {},
+  );
+  await repo.initialize();
+  await repo.seedDemo();
+  await repo.seedDemo();
+  const expanded = await repo.snapshot();
+  assert.equal(expanded.items.length, DEMO_ITEM_COUNT);
+  assert.equal(
+    new Set(expanded.items.map((item) => item.id)).size,
+    DEMO_ITEM_COUNT,
+  );
+  assert.deepEqual(
+    expanded.items.find((item) => item.id === legacy.items[0].id),
+    legacy.items[0],
+  );
+  assert.ok(
+    expanded.items.some((item) => item.category === 'Kitchen & Dining'),
+  );
+  assert.ok(
+    expanded.items.every((item) =>
+      expanded.places.some((place) => place.id === item.placeId),
+    ),
+  );
+});
+
+test('Home layout persists independently of inventory layout', async () => {
+  const env = setup();
+  await env.repo.initialize();
+  await env.repo.settings({ homeItemsView: 'list', defaultItemsView: 'grid' });
+  let restored;
+  await new MemoryRepository(env.adapter, (data) => {
+    restored = data;
+  }).initialize();
+  assert.equal(restored.settings.homeItemsView, 'list');
+  assert.equal(restored.settings.defaultItemsView, 'grid');
+  await env.repo.settings({ homeItemsView: 'grid' });
+  assert.equal(env.current().settings.homeItemsView, 'grid');
+});
+
 test('save, move, history, archive, and settings survive a repository restart', async () => {
   const env = setup();
   await env.repo.initialize();

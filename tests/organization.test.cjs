@@ -9,6 +9,7 @@ const {
 } = require('../.test-build/utils/inventory');
 const { validShortcuts } = require('../.test-build/utils/preferences');
 const { createBackup, readBackup } = require('../.test-build/utils/backup');
+const { folderPath } = require('../.test-build/utils/folders');
 async function setup() {
   let saved = emptyData();
   let data;
@@ -202,22 +203,25 @@ test('older stored data gains empty Quick Access without losing items', async ()
   assert.equal(upgraded.items.length, old.items.length);
   assert.deepEqual(upgraded.settings.quickAccess, []);
 });
-test('version 2 backups preserve Kitchen category and shortcuts, while version 1 remains readable', async () => {
+test('version 4 backups preserve Kitchen category and shortcuts, while version 1 remains readable', async () => {
   const env = await setup();
+  await env.repo.settings({ homeItemsView: 'list' });
   await env.repo.toggleShortcut({ kind: 'place', id: env.kitchen });
   const bytes = await createBackup(await env.repo.snapshot(), async () => {
     throw new Error('unused');
   });
   const zip = await JSZip.loadAsync(bytes);
   const manifest = JSON.parse(await zip.file('manifest.json').async('string'));
-  assert.equal(manifest.version, 2);
+  assert.equal(manifest.version, 4);
   const v2 = await readBackup(bytes);
+  assert.equal(v2.data.settings.homeItemsView, 'list');
   assert.deepEqual(v2.data.settings.quickAccess, [
     { kind: 'place', id: env.kitchen },
   ]);
   assert.ok(v2.data.items.some((i) => i.category === 'Kitchen & Dining'));
   manifest.version = 1;
   delete manifest.data.settings.quickAccess;
+  delete manifest.data.settings.homeItemsView;
   manifest.data.items.forEach((i) => {
     if (i.category === 'Kitchen & Dining') i.category = 'Household';
   });
@@ -226,6 +230,7 @@ test('version 2 backups preserve Kitchen category and shortcuts, while version 1
     await zip.generateAsync({ type: 'uint8array', compression: 'STORE' }),
   );
   assert.deepEqual(v1.data.settings.quickAccess, []);
+  assert.equal(v1.data.settings.homeItemsView, 'grid');
   assert.equal(v1.data.items.length, env.data().items.length);
 });
 test('duplicate records retain shared photographs and get independent identities and history', async () => {
@@ -241,4 +246,115 @@ test('duplicate records retain shared photographs and get independent identities
   assert.equal(copy.photoUri, 'file://shared.jpg');
   assert.equal(copy.name, 'Spoon (copy)');
   assert.equal(env.data().history.filter((h) => h.itemId === copyId).length, 1);
+});
+
+test('deleting a top-level folder unfiles direct items and promotes children without losing belongings', async () => {
+  const env = await setup();
+  const cable = env.data().items.find((item) => item.id === env.cable);
+  await env.repo.saveItem({ ...cable, photoUri: 'file://cable.jpg' }, cable.id);
+  await env.repo.updateItem(cable.id, { isArchived: true });
+  const before = await env.repo.snapshot();
+
+  await env.repo.deleteFolder(env.camping);
+
+  const after = await env.repo.snapshot();
+  assert.equal(
+    after.folders.find((folder) => folder.id === env.kit).parentId,
+    undefined,
+  );
+  assert.equal(
+    after.folders.some((folder) => folder.id === env.camping),
+    false,
+  );
+  const expectedItems = structuredClone(before.items);
+  delete expectedItems.find((item) => item.id === env.cable).folderId;
+  assert.deepEqual(after.items, expectedItems);
+  assert.deepEqual(after.history, before.history);
+  assert.deepEqual(
+    query(after, { folderId: env.kit }).map((item) => item.id),
+    [env.spatula],
+  );
+  assert.deepEqual(
+    query(after, { folderId: 'unfiled', view: 'archived' })
+      .map((item) => item.id)
+      .sort(),
+    [env.cable, env.receipt].sort(),
+  );
+  let reloaded;
+  await new MemoryRepository(env.adapter, (data) => {
+    reloaded = data;
+  }).initialize();
+  assert.deepEqual(JSON.parse(JSON.stringify(reloaded)), after);
+});
+
+test('reparenting a folder updates descendant paths and search without changing item locations', async () => {
+  const env = await setup();
+  const tools = await env.repo.saveFolder('Tools', env.kit);
+  const spatula = env.data().items.find((item) => item.id === env.spatula);
+  await env.repo.saveItem({ ...spatula, folderId: tools }, spatula.id);
+  const travel = await env.repo.saveFolder('Travel');
+  const before = await env.repo.snapshot();
+
+  await env.repo.saveFolder('Cooking kit', travel, env.kit);
+
+  const after = await env.repo.snapshot();
+  assert.equal(
+    folderPath(tools, after.folders),
+    'Travel › Cooking kit › Tools',
+  );
+  assert.deepEqual(
+    query(after, { folderId: env.camping }).map((item) => item.id),
+    [env.cable],
+  );
+  assert.deepEqual(
+    query(after, { folderId: travel }).map((item) => item.id),
+    [env.spatula],
+  );
+  assert.equal(
+    query(after, { folderId: travel, includeDescendants: false }).length,
+    0,
+  );
+  assert.deepEqual(
+    query(after, { text: 'travel' }).map((item) => item.id),
+    [env.spatula],
+  );
+  assert.deepEqual(after.items, before.items);
+  assert.deepEqual(after.history, before.history);
+});
+
+test('invalid folder changes leave published and persisted data intact and later filing succeeds', async () => {
+  const env = await setup();
+  const before = await env.repo.snapshot();
+  const spoon = before.items.find((item) => item.id === env.spoon);
+  await assert.rejects(env.repo.saveFolder('   '), /name/);
+  await assert.rejects(
+    env.repo.saveFolder('Orphan', 'missing-parent'),
+    /no longer exists/,
+  );
+  await assert.rejects(
+    env.repo.saveFolder('Camping', env.camping, env.camping),
+    /inside itself/,
+  );
+  await assert.rejects(
+    env.repo.saveItem({ ...spoon, folderId: 'deleted-folder' }, spoon.id),
+    /folder no longer exists/,
+  );
+  await assert.rejects(
+    env.repo.deleteFolder('missing-folder'),
+    /no longer exists/,
+  );
+  assert.deepEqual(env.data(), before);
+  let reloaded;
+  await new MemoryRepository(env.adapter, (data) => {
+    reloaded = data;
+  }).initialize();
+  assert.deepEqual(reloaded, before);
+
+  await env.repo.saveItem({ ...spoon, folderId: env.kit }, spoon.id);
+  await env.repo.saveItem({ ...spoon, folderId: undefined }, spoon.id);
+  assert.deepEqual(
+    query(env.data(), { folderId: 'unfiled' }).map((item) => item.id),
+    [spoon.id],
+  );
+  assert.deepEqual(env.data().history, before.history);
 });

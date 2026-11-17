@@ -5,13 +5,23 @@ export function ItemGallery({
   placeId,
   text,
 }: {
-  filter?: 'all' | 'favorites' | 'archived';
+  filter?: 'all' | 'favorites' | 'archived' | 'trash';
   placeId?: string;
   text?: string;
 }) {
   return (
     <Screen scroll={false}>
-      <Header title="All Items" />
+      <Header
+        title={
+          filter === 'trash'
+            ? 'Trash'
+            : filter === 'archived'
+              ? 'Archive'
+              : filter === 'favorites'
+                ? 'Starred'
+                : 'All Items'
+        }
+      />
       <ItemBrowser
         initialView={filter}
         scopePlaceId={placeId}

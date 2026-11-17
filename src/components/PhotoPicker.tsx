@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Button, Copy, ErrorMessage, Icon } from './ui';
@@ -10,12 +10,15 @@ export function PhotoPicker({
   onChange,
   label,
   children,
+  compact = false,
 }: {
+  compact?: boolean;
   uri?: string;
   onChange(uri?: string): void;
   label: string;
   children?: import('react').ReactNode;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const { colors } = useTheme();
@@ -46,6 +49,88 @@ export function PhotoPicker({
       setBusy(false);
     }
   }
+  if (compact)
+    return (
+      <View style={{ gap: 10 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            uri ? 'Edit location photo' : 'Add location photo'
+          }
+          accessibilityState={{ expanded }}
+          onPress={() => setExpanded(!expanded)}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            minHeight: 56,
+          }}
+        >
+          {uri ? (
+            <Image
+              source={{ uri }}
+              contentFit="cover"
+              style={{ width: 44, height: 44, borderRadius: 10 }}
+            />
+          ) : (
+            <Icon name="camera-outline" size={22} />
+          )}
+          <View style={{ flex: 1 }}>
+            <Copy style={{ fontWeight: '600' }}>
+              {uri ? 'Location photo' : 'Add photo'}
+            </Copy>
+            <Copy muted style={{ fontSize: 12 }}>
+              Optional
+            </Copy>
+          </View>
+          <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={16} />
+        </Pressable>
+        {expanded && (
+          <>
+            {uri &&
+              (children ?? (
+                <Image
+                  source={{ uri }}
+                  contentFit="contain"
+                  style={{ height: 180, width: '100%', borderRadius: 16 }}
+                />
+              ))}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  title="Take photo"
+                  secondary
+                  icon="camera-outline"
+                  busy={busy}
+                  onPress={() => {
+                    void pick(true);
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  title="Choose photo"
+                  secondary
+                  icon="image-outline"
+                  disabled={busy}
+                  onPress={() => {
+                    void pick(false);
+                  }}
+                />
+              </View>
+            </View>
+            {uri && (
+              <Button
+                secondary
+                title="Remove photo"
+                onPress={() => onChange(undefined)}
+              />
+            )}
+          </>
+        )}
+        <ErrorMessage message={error} />
+      </View>
+    );
   return (
     <View style={{ gap: 12 }}>
       <Copy style={{ fontWeight: '600' }}>{label}</Copy>

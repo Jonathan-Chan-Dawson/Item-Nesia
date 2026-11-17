@@ -1,3 +1,4 @@
+import { useMotion } from '../hooks/useMotion';
 import { useState, type ReactNode, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
@@ -168,9 +169,11 @@ export function IconButton({
 export function Screen({
   children,
   scroll = true,
+  overlay,
 }: {
   children: ReactNode;
   scroll?: boolean;
+  overlay?: ReactNode;
 }) {
   const { colors } = useTheme();
   return (
@@ -188,6 +191,19 @@ export function Screen({
       ) : (
         <View style={[s.content, { flex: 1 }]}>{children}</View>
       )}
+      {overlay && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            left: 20,
+            right: 20,
+            alignItems: 'center',
+          }}
+        >
+          <View style={{ width: '100%', maxWidth: 600 }}>{overlay}</View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -200,14 +216,17 @@ export function Header({
   home?: boolean;
   right?: ReactNode;
 }) {
+  const motion = useMotion();
   const [menu, setMenu] = useState(false);
   const { colors } = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const compactHome = width < 360 || fontScale > 1.2;
   const destinations: [string, Href, IconName][] = [
-    ['All Items', '/items', 'grid-outline'],
-    ['Folders', '/folders', 'folder-outline'],
-    ['Places', '/places', 'file-tray-outline'],
+    ['Starred', '/favorites', 'star-outline'],
+    ['Archive', '/archived', 'archive-outline'],
+    ['Trash', '/trash', 'trash-outline'],
+    ['Backups', '/backups', 'download-outline'],
+    ['Help', '/about', 'help-circle-outline'],
   ];
   return (
     <>
@@ -272,7 +291,7 @@ export function Header({
       <Modal
         visible={menu}
         transparent
-        animationType="fade"
+        animationType={motion ? 'fade' : 'none'}
         onRequestClose={() => setMenu(false)}
       >
         <Pressable

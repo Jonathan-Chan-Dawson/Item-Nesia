@@ -1,3 +1,6 @@
+import { LocationHistoryTimeline } from '../../components/LocationHistoryTimeline';
+import { LocationSummary } from '../../components/LocationSummary';
+import { locationSnapshot } from '../../utils/locations';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, View } from 'react-native';
@@ -11,24 +14,26 @@ import {
   Icon,
   Panel,
   Screen,
-  Section,
   s,
 } from '../../components/ui';
+import { StarButton } from '../../components/StarButton';
 import { ItemPhoto } from '../../components/ItemCard';
-import { useMemory, useTheme } from '../../hooks/useMemory';
+import { useMemory } from '../../hooks/useMemory';
 import { ChoiceSheet } from '../../components/controls';
 import { OverflowMenu } from '../../components/OverflowMenu';
-import { LocationPhoto } from '../../components/LocationPhoto';
 import { folderPath } from '../../utils/folders';
-import { placePath } from '../../utils/memory';
 export default function ItemDetails() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, moveId, moved } = useLocalSearchParams<{
+    id: string;
+    moveId?: string;
+    moved?: string;
+  }>();
   const { data, repository } = useMemory();
-  const { colors } = useTheme();
   const [error, setError] = useState<string>();
   const [found, setFound] = useState(false);
   const [details, setDetails] = useState(false);
   const [filing, setFiling] = useState(false);
+  const [moveDismissed, setMoveDismissed] = useState(false);
   const [notice, setNotice] = useState<string>();
   const item = data.items.find((i) => i.id === id);
   const run = (action: Promise<unknown>) => {
@@ -45,6 +50,56 @@ export default function ItemDetails() {
         />
       </Screen>
     );
+  if (item.deletedAt)
+    return (
+      <Screen>
+        <Header title={item.name} />
+        <ItemPhoto item={item} height={220} />
+        <Copy title>In Trash</Copy>
+        <Copy muted>
+          {item.name} is kept with its photos and location history. It stays
+          here until you restore or permanently delete it.
+        </Copy>
+        <Copy muted>
+          Deleted {new Date(item.deletedAt).toLocaleDateString()}. Restore
+          returns it to {item.isArchived ? 'Archive' : 'your active items'}.
+        </Copy>
+        <Button
+          title="Undo · restore item"
+          icon="arrow-undo-outline"
+          onPress={() =>
+            run(
+              repository
+                .restoreItem(id)
+                .then(() =>
+                  setNotice(
+                    item.isArchived ? 'Restored to Archive.' : 'Item restored.',
+                  ),
+                ),
+            )
+          }
+        />
+        <Button
+          danger
+          title="Delete permanently"
+          icon="trash-outline"
+          onPress={() => {
+            void confirm(
+              `Permanently delete ${item.name}?`,
+              'Its history and photos no longer used elsewhere will be removed. This cannot be undone.',
+            ).then((yes) => {
+              if (yes)
+                run(
+                  repository
+                    .deleteItem(id)
+                    .then(() => router.replace('/trash')),
+                );
+            });
+          }}
+        />
+        <ErrorMessage message={error} />
+      </Screen>
+    );
   return (
     <Screen>
       <Header
@@ -57,8 +112,8 @@ export default function ItemDetails() {
               { value: 'file', label: 'Change folder', icon: 'folder-outline' },
               {
                 value: 'favorite',
-                label: item.isFavorite ? 'Remove favorite' : 'Favorite item',
-                icon: 'heart-outline',
+                label: item.isFavorite ? 'Unstar item' : 'Star item',
+                icon: 'star-outline',
               },
               {
                 value: 'duplicate',
@@ -70,7 +125,11 @@ export default function ItemDetails() {
                 label: item.isArchived ? 'Restore item' : 'Archive item',
                 icon: 'archive-outline',
               },
-              { value: 'delete', label: 'Delete item', icon: 'trash-outline' },
+              {
+                value: 'delete',
+                label: 'Move to Trash',
+                icon: 'trash-outline',
+              },
             ]}
             onSelect={(value) => {
               if (value === 'edit')
@@ -102,17 +161,11 @@ export default function ItemDetails() {
                   ),
                 );
               if (value === 'delete')
-                void confirm(
-                  `Delete ${item.name}?`,
-                  'This removes the item and its location history.',
-                ).then((yes) => {
-                  if (yes)
-                    run(
-                      repository
-                        .deleteItem(id)
-                        .then(() => router.replace('/items')),
-                    );
-                });
+                run(
+                  repository
+                    .trashItem(id)
+                    .then(() => setNotice('Moved to Trash.')),
+                );
             }}
           />
         }
@@ -123,7 +176,7 @@ export default function ItemDetails() {
           <Copy title style={{ flex: 1, fontSize: 27 }}>
             {item.name}
           </Copy>
-          {item.isFavorite && <Icon name="heart" size={18} />}
+          <StarButton item={item} />
         </View>
         {(item.isDemo || item.isArchived) && (
           <Copy muted style={{ fontSize: 12 }}>
@@ -136,61 +189,64 @@ export default function ItemDetails() {
           </Copy>
         )}
       </View>
-      <View
-        style={{
-          padding: 20,
-          borderRadius: 22,
-          backgroundColor: colors.soft,
-          gap: 10,
-        }}
-      >
-        <View style={[s.row, { justifyContent: 'flex-start', gap: 7 }]}>
-          <Icon name="location-outline" size={16} />
-          <Copy
-            style={{
-              fontSize: 11,
-              fontWeight: '700',
-              letterSpacing: 1,
-              color: colors.primary,
-            }}
-          >
-            LAST SAVED LOCATION
-          </Copy>
-        </View>
-        <Copy title>
-          {placePath(item.placeId, data.places) || 'Exact spot'}
-        </Copy>
-        {item.exactSpot && <Copy>{item.exactSpot}</Copy>}
-        <Copy muted style={{ fontSize: 12 }}>
-          Last recorded: {new Date(item.locationUpdatedAt).toLocaleDateString()}{' '}
-          · Saved by you, not live tracking.
-        </Copy>
-        {item.placeId && (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              router.push({
-                pathname: '/places/[id]',
-                params: { id: item.placeId },
-              })
-            }
-            style={{ minHeight: 44, justifyContent: 'center' }}
-          >
-            <Copy
-              style={{ color: colors.primary, fontWeight: '600', fontSize: 13 }}
-            >
-              Show everything stored here →
-            </Copy>
-          </Pressable>
-        )}
-      </View>
-      {item.locationPhotoUri && (
-        <LocationPhoto
-          key={item.locationPhotoUri}
-          uri={item.locationPhotoUri}
-          x={item.locationPinX}
-          y={item.locationPinY}
+      <Panel>
+        <LocationSummary
+          snapshot={locationSnapshot(item, data.places)}
+          label="Saved location"
         />
+        <Copy muted style={{ fontSize: 11 }}>
+          Saved {new Date(item.locationUpdatedAt).toLocaleDateString()}
+        </Copy>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Button
+            secondary
+            title="Move item"
+            icon="swap-horizontal-outline"
+            onPress={() =>
+              router.push({ pathname: '/items/move/[id]', params: { id } })
+            }
+          />
+          {item.placeId && (
+            <Button
+              secondary
+              title="Open place"
+              icon="location-outline"
+              onPress={() =>
+                router.push({
+                  pathname: '/places/[id]',
+                  params: { id: item.placeId },
+                })
+              }
+            />
+          )}
+        </View>
+      </Panel>
+      {moved !== undefined && !moveDismissed && (
+        <Panel>
+          <Copy>
+            {moved === '1' ? 'Location saved.' : 'Location unchanged.'}
+          </Copy>
+          {moveId && (
+            <Button
+              secondary
+              title="Undo move"
+              icon="arrow-undo-outline"
+              onPress={() =>
+                run(
+                  repository.undoMove(id, moveId).then(() => {
+                    setMoveDismissed(true);
+                    setNotice('Previous location restored.');
+                  }),
+                )
+              }
+            />
+          )}
+          <Button
+            secondary
+            title="Dismiss"
+            onPress={() => setMoveDismissed(true)}
+          />
+        </Panel>
       )}
       <ErrorMessage message={error} />
       {notice && <Copy>{notice}</Copy>}
@@ -216,14 +272,6 @@ export default function ItemDetails() {
           />
         </Panel>
       )}
-      <Button
-        title="Move Item"
-        secondary
-        icon="swap-horizontal-outline"
-        onPress={() =>
-          router.push({ pathname: '/items/move/[id]', params: { id } })
-        }
-      />
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: details }}
@@ -268,37 +316,7 @@ export default function ItemDetails() {
           )}
         </Panel>
       )}
-      <Section title="Location history" />
-      {data.history
-        .filter((h) => h.itemId === id)
-        .map((entry) => (
-          <View
-            key={entry.id}
-            style={[
-              s.row,
-              { alignItems: 'flex-start', justifyContent: 'flex-start' },
-            ]}
-          >
-            <View
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor: colors.primary,
-                marginTop: 7,
-              }}
-            />
-            <View style={{ flex: 1, gap: 3 }}>
-              <Copy style={{ fontWeight: '600' }}>
-                {placePath(entry.newPlaceId, data.places) || 'Recorded spot'}
-              </Copy>
-              {entry.newSpot && <Copy muted>{entry.newSpot}</Copy>}
-              <Copy muted style={{ fontSize: 12 }}>
-                {new Date(entry.changedAt).toLocaleString()}
-              </Copy>
-            </View>
-          </View>
-        ))}
+      <LocationHistoryTimeline itemId={id} />
       <ChoiceSheet
         visible={filing}
         title="Organize in a folder"
